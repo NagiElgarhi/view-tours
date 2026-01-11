@@ -1,37 +1,414 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>دليلك السياحى - View Tours</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>دليلك السياحي: ViewTours</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap');
-        body {
-            font-family: 'Tajawal', sans-serif;
-            background: #f8fafc;
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #0d2618 0%, #1a472a 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+            overflow-x: hidden;
+        }
+        
+        /* تخصيص شريط التمرير */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 140, 0, 0.7);
+            border-radius: 4px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #ff8c00;
+            margin-bottom: 25px;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+        
+        .logo span {
+            color: #4CAF50;
+            display: block;
+            font-size: 1.8rem;
+            margin-top: -5px;
+        }
+        
+        .app-icon {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #ff8c00 0%, #ff6600 100%);
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            box-shadow: 0 10px 25px rgba(255, 102, 0, 0.4);
+            animation: floatIcon 3s ease-in-out infinite;
+        }
+        
+        @keyframes floatIcon {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        .app-icon i {
+            font-size: 3.5rem;
+            color: white;
+        }
+        
+        .app-name {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            line-height: 1.2;
+        }
+        
+        .app-tagline {
+            font-size: 1.1rem;
+            color: #ffcc80;
+            margin-bottom: 40px;
+            line-height: 1.5;
+            max-width: 90%;
+            padding: 0 10px;
+        }
+        
+        .main-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #ff8c00 0%, #ff6600 100%);
+            color: white;
+            text-decoration: none;
+            border: none;
+            padding: 22px 40px;
+            font-size: 1.6rem;
+            font-weight: 700;
+            border-radius: 70px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(255, 102, 0, 0.4);
+            min-width: 280px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            width: 90%;
+            max-width: 350px;
+        }
+        
+        .main-button i {
+            margin-left: 12px;
+            font-size: 1.4rem;
+        }
+        
+        .main-button:hover, .main-button:active {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 15px 35px rgba(255, 102, 0, 0.6);
+        }
+        
+        .main-button:active {
+            transform: translateY(0) scale(0.98);
+        }
+        
+        .main-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ff6600 0%, #ff8c00 100%);
+            z-index: -1;
+            border-radius: 70px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .main-button:hover::before {
+            opacity: 1;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 10px 25px rgba(255, 102, 0, 0.4); }
+            50% { box-shadow: 0 10px 35px rgba(255, 102, 0, 0.7); }
+            100% { box-shadow: 0 10px 25px rgba(255, 102, 0, 0.4); }
+        }
+        
+        .instructions {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 20px;
+            margin-top: 20px;
+            width: 90%;
+            max-width: 350px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .instructions h3 {
+            color: #ff8c00;
+            font-size: 1.3rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .instructions h3 i {
+            font-size: 1.2rem;
+        }
+        
+        .instructions p {
+            color: #ddd;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            width: 100%;
+            max-width: 350px;
+            color: #aaa;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .footer p {
+            margin-bottom: 8px;
+        }
+        
+        /* تحسينات للأجهزة الصغيرة جداً */
+        @media (max-width: 380px) {
+            .container {
+                padding: 15px 10px;
+            }
+            
+            .app-name {
+                font-size: 2.4rem;
+            }
+            
+            .app-icon {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .app-icon i {
+                font-size: 3rem;
+            }
+            
+            .main-button {
+                font-size: 1.4rem;
+                padding: 20px 35px;
+                min-width: 250px;
+            }
+        }
+        
+        /* وضع المنظر الأفقي (Landscape) */
+        @media (max-height: 600px) and (orientation: landscape) {
+            .container {
+                min-height: auto;
+                padding: 30px 20px;
+            }
+            
+            .app-icon {
+                width: 80px;
+                height: 80px;
+                margin-bottom: 20px;
+            }
+            
+            .app-icon i {
+                font-size: 2.5rem;
+            }
+            
+            .app-name {
+                font-size: 2.2rem;
+                margin-bottom: 5px;
+            }
+            
+            .app-tagline {
+                margin-bottom: 25px;
+                font-size: 1rem;
+            }
+            
+            .main-button {
+                padding: 18px 30px;
+                font-size: 1.4rem;
+                margin-bottom: 20px;
+            }
+            
+            .instructions {
+                margin-top: 15px;
+                padding: 15px;
+            }
+            
+            .footer {
+                margin-top: 25px;
+                padding-top: 15px;
+            }
+        }
+        
+        /* رسوم متحركة عند التحميل */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .fade-in {
+            animation: fadeInUp 0.8s ease-out forwards;
+            opacity: 0;
+        }
+        
+        .delay-1 {
+            animation-delay: 0.1s;
+        }
+        
+        .delay-2 {
+            animation-delay: 0.3s;
+        }
+        
+        .delay-3 {
+            animation-delay: 0.5s;
+        }
+        
+        .delay-4 {
+            animation-delay: 0.7s;
         }
     </style>
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.2.3",
-    "react-dom": "https://esm.sh/react-dom@19.2.3",
-    "react-dom/client": "https://esm.sh/react-dom@19.2.3/client",
-    "@google/genai": "https://esm.sh/@google/genai@1.35.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
 </head>
 <body>
-    <div id="root"></div>
-    <!-- استدعاء ملف index.tsx كموديول وهو المسؤول عن تشغيل التطبيق -->
-    <script type="module" src="index.tsx"></script>
+    <div class="container">
+        <!-- أيقونة التطبيق -->
+        <div class="app-icon fade-in">
+            <i class="fas fa-map-marked-alt"></i>
+        </div>
+        
+        <!-- اسم التطبيق -->
+        <div class="app-name fade-in delay-1">ViewTours</div>
+        
+        <!-- الشعار -->
+        <div class="logo fade-in delay-1">دليلك <span>السياحي</span></div>
+        
+        <!-- زر فتح التطبيق -->
+        <a href="https://ai.studio/apps/drive/1k_Rq7RHPRCTC6402PukQFvV3AnceoY5e?fullscreenApplet=true" 
+           class="main-button pulse fade-in delay-2" 
+           target="_blank">
+            <i class="fas fa-external-link-alt"></i>
+            افتح التطبيق الآن
+        </a>
+        
+        <!-- تعليمات الاستخدام -->
+        <div class="instructions fade-in delay-3">
+            <h3><i class="fas fa-info-circle"></i> تعليمات الاستخدام</h3>
+            <p>انقر على الزر أعلاه لفتح تطبيق ViewTours. بعد فتح الرابط، يمكنك استخدام التطبيق مباشرة في متصفح هاتفك.</p>
+        </div>
+        
+        <!-- التذييل -->
+        <div class="footer fade-in delay-4">
+            <p>© 2023 دليلك السياحي: ViewTours</p>
+            <p>التطبيق متوافق مع جميع أجهزة الهاتف المحمول</p>
+        </div>
+    </div>
+
+    <script>
+        // تحسين تجربة الهاتف
+        document.addEventListener('DOMContentLoaded', function() {
+            // منع التكبير بالنقر المزدوج على الهاتف
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, false);
+            
+            // إضافة تأثير عند النقر على الزر
+            const mainButton = document.querySelector('.main-button');
+            mainButton.addEventListener('touchstart', function() {
+                this.style.transform = 'scale(0.98)';
+            });
+            
+            mainButton.addEventListener('touchend', function() {
+                this.style.transform = '';
+                // فتح الرابط في نافذة جديدة
+                setTimeout(() => {
+                    window.open(this.href, '_blank');
+                }, 100);
+            });
+            
+            // إضافة صوت نقر خفيف (اختياري)
+            const clickSound = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+            
+            mainButton.addEventListener('touchstart', function() {
+                try {
+                    clickSound.currentTime = 0;
+                    clickSound.play();
+                } catch(e) {
+                    // تجاهل خطأ الصوت إذا لم يكن مدعوماً
+                }
+            });
+            
+            // إظهار رسالة ترحيب
+            console.log("مرحباً بك في تطبيق دليلك السياحي للهواتف!");
+            
+            // الكشف عن نوع الجهاز
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.log("تم الكشف عن جهاز محمول - التصميم متوافق");
+            }
+        });
+    </script>
 </body>
 </html>
