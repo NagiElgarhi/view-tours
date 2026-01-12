@@ -8,26 +8,23 @@ interface AnalysisResult {
   history: string;
   architecture: string;
   funFacts: string[];
-  uncertain?: boolean;
-  message?: string;
-  generatedImage?: string;
 }
 
 interface NearbyLandmark {
   name: string;
   distance: string;
-  direction: string;
   brief: string;
+  icon: string; // FontAwesome icon class
 }
 
 const App: React.FC = () => {
-  const [image, setImage] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [readingSection, setReadingSection] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [nearbyLandmarks, setNearbyLandmarks] = useState<NearbyLandmark[]>([]);
+  const [allDiscoveredLandmarks, setAllDiscoveredLandmarks] = useState<NearbyLandmark[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -44,154 +41,21 @@ const App: React.FC = () => {
   const startCamera = async () => {
     setIsScanning(true);
     setResult(null);
-    setImage(null);
     setError(null);
     setReadingSection(null);
-    setNearbyLandmarks([]);
+    setAllDiscoveredLandmarks([]);
     window.speechSynthesis.cancel();
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
+        video: { facingMode: 'environment' } 
       });
-      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
-        };
+        videoRef.current.play();
       }
     } catch (err) {
-      setError("تعذر الوصول للكاميرا. يرجى التأكد من منح الأذونات.");
       setIsScanning(false);
-    }
-  };
-
-  const cleanJsonString = (str: string) => {
-    return str.replace(/```json/g, '').replace(/```/g, '').trim();
-  };
-
-  const analyzeImage = async (base64Data: string | null, textPrompt?: string) => {
-    setLoading(true);
-    setError(null);
-    setNearbyLandmarks([]);
-    window.speechSynthesis.cancel();
-
-    // إذا كان الطلب مبنياً على نص (معلم مجاور)، نقوم بمسح الصورة بناءً على طلبك
-    if (!base64Data && textPrompt) {
-      setImage(null);
-    } else if (base64Data) {
-      setImage(base64Data);
-    }
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      
-      const systemInstruction = `أنت مؤرخ عالمي خبير. قدم تقريراً شاملاً باللغة العربية.
-      يجب أن يكون الرد بتنسيق JSON حصراً:
-      {
-        "title": "اسم المعلم",
-        "history": "سرد تاريخي عميق جداً (لا يقل عن 500 كلمة)",
-        "architecture": "تحليل معماري فني وهندسي دقيق (لا يقل عن 200 كلمة)",
-        "funFacts": ["حقيقة مذهلة 1", "حقيقة مذهلة 2", "حقيقة مذهلة 3", "حقيقة مذهلة 4", "حقيقة مذهلة 5"]
-      }`;
-
-      let promptParts = [];
-      if (base64Data) {
-        promptParts.push({ inlineData: { mimeType: 'image/jpeg', data: base64Data.split(',')[1] } });
-        promptParts.push({ text: "تعرف على هذا المعلم وقدم التاريخ الكامل له." });
-      } else {
-        promptParts.push({ text: `حلل المعلم التاريخي التالي وقدم كافة التفاصيل العميقة: ${textPrompt}` });
-      }
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: [{ parts: promptParts }],
-        config: { 
-          systemInstruction,
-          responseMimeType: "application/json",
-          temperature: 0.1
-        }
-      });
-
-      const cleanedText = cleanJsonString(response.text || '{}');
-      const data = JSON.parse(cleanedText);
-      
-      setResult({
-        title: data.title || textPrompt || "معلم أثري",
-        history: data.history || "",
-        architecture: data.architecture || "",
-        funFacts: Array.isArray(data.funFacts) ? data.funFacts : []
-      });
-      
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    } catch (err: any) {
-      console.error("Analysis error:", err);
-      setError("حدث خطأ في استحضار البيانات. يرجى المحاولة مرة أخرى.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setImage(base64);
-        stopCamera();
-        analyzeImage(base64);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const findNearby = async () => {
-    if (!result) return;
-    setNearbyLoading(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const prompt = `ابحث عن بالضبط 10 معالم تاريخية أو سياحية هامة قريبة من "${result.title}".
-      أعد JSON حصراً:
-      [
-        {"name": "اسم المعلم", "distance": "المسافة", "direction": "الاتجاه", "brief": "نبذة قصيرة جذابة"}
-      ]`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [{ parts: [{ text: prompt }] }],
-        config: { responseMimeType: "application/json" }
-      });
-
-      const cleanedText = cleanJsonString(response.text || '[]');
-      const data = JSON.parse(cleanedText);
-      setNearbyLandmarks(data);
-    } catch (err) {
-      console.error("Discovery error:", err);
-    } finally {
-      setNearbyLoading(false);
-    }
-  };
-
-  const capturePhoto = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setImage(dataUrl);
-        stopCamera();
-        analyzeImage(dataUrl);
-      }
     }
   };
 
@@ -204,13 +68,86 @@ const App: React.FC = () => {
     setIsScanning(false);
   };
 
+  const cleanJsonString = (str: string) => str.replace(/```json/g, '').replace(/```/g, '').trim();
+
+  const performAnalysis = async (prompt: string, imageData?: string, keepNearby = false) => {
+    setLoading(true);
+    setError(null);
+    window.speechSynthesis.cancel();
+    // إذا لم نكن نريد الاحتفاظ بالقائمة (مثل بحث جديد كلياً)، نصفر القائمة
+    if (!keepNearby) setAllDiscoveredLandmarks([]);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const systemInstruction = `أنت أعظم مؤرخ في العصور الحديثة. قدم تقريراً ملحمياً باللغة العربية الفصحى.
+      يجب أن يكون قسم "history" غنياً جداً وبالتفصيل الممل بحيث لا يقل عن 600 كلمة من السرد الممتع.
+      يجب أن يكون الرد بتنسيق JSON حصراً:
+      {
+        "title": "اسم المعلم",
+        "history": "سرد تاريخي ملحمي طويل جداً (أكثر من 600 كلمة)",
+        "architecture": "تحليل معماري وفني عميق (أكثر من 200 كلمة)",
+        "funFacts": ["6 حقائق مدهشة وفريدة"]
+      }`;
+
+      const contents: any = imageData 
+        ? [{ parts: [{ inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } }, { text: prompt }] }]
+        : [{ parts: [{ text: prompt }] }];
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents,
+        config: { systemInstruction, responseMimeType: "application/json", temperature: 0.2 }
+      });
+
+      const data = JSON.parse(cleanJsonString(response.text || '{}'));
+      setResult(data);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      setError("تعذر استحضار المخطوطة حالياً.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchText.trim()) return;
+    stopCamera();
+    performAnalysis(`حلل المعلم التاريخي التالي بالتفصيل الملحمي: ${searchText}`);
+  };
+
+  const findNearby = async () => {
+    if (!result) return;
+    setNearbyLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const prompt = `ابحث عن بالضبط 12 معلماً تاريخياً قريباً من "${result.title}". 
+      أعد JSON حصراً:
+      [
+        {"name": "اسم المعلم", "distance": "المسافة", "brief": "نبذة", "icon": "fa-monument أو fa-mosque أو fa-archway إلخ"}
+      ]`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ parts: [{ text: prompt }] }],
+        config: { responseMimeType: "application/json" }
+      });
+
+      const data = JSON.parse(cleanJsonString(response.text || '[]'));
+      setAllDiscoveredLandmarks(data);
+    } catch (err) { console.error(err); } finally { setNearbyLoading(false); }
+  };
+
+  const handleSelectLandmark = (landmark: NearbyLandmark) => {
+    setSearchText(landmark.name);
+    // الاحتفاظ بالقائمة المكتشفة ليتم التصفية منها بالأسفل
+    performAnalysis(`حلل المعلم التاريخي التالي بالتفصيل الملحمي: ${landmark.name}`, undefined, true);
+  };
+
   const readText = (text: string, sectionId: string) => {
     if (window.speechSynthesis.speaking) {
       window.speechSynthesis.cancel();
-      if (readingSection === sectionId) {
-        setReadingSection(null);
-        return;
-      }
+      if (readingSection === sectionId) { return setReadingSection(null); }
     }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ar-SA';
@@ -220,49 +157,65 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-emerald-950 text-slate-100 flex flex-col items-center selection:bg-orange-500/30 font-['Tajawal'] pb-10 overflow-x-hidden">
-      <header className="w-full py-4 px-6 bg-emerald-950/90 backdrop-blur-md shadow-lg sticky top-0 z-50 flex justify-between items-center border-b border-orange-500/20">
+    <div className="min-h-screen bg-[#021512] text-slate-100 flex flex-col items-center selection:bg-yellow-500/30 font-['Tajawal'] pb-10 overflow-x-hidden">
+      <header className="w-full py-4 px-6 bg-[#021512]/95 backdrop-blur-md shadow-2xl sticky top-0 z-50 flex flex-col md:flex-row gap-4 justify-between items-center border-b border-yellow-600/30">
         <div className="flex items-center gap-3">
-          <div className="bg-orange-500 p-2 rounded-xl text-white shadow-lg">
+          <div className="bg-gradient-to-br from-yellow-400 to-yellow-700 p-2 rounded-xl text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]">
             <i className="fas fa-eye text-lg"></i>
           </div>
           <div className="flex flex-col">
-            <h1 className="text-lg font-black text-white leading-none">دليلك السياحى</h1>
-            <span className="text-[10px] font-bold text-orange-400 tracking-widest uppercase">View Tours</span>
+            <h1 className="text-lg font-black text-yellow-500 leading-none">دليلك السياحى</h1>
+            <span className="text-[10px] font-bold text-yellow-600/60 tracking-widest uppercase">View Tours</span>
           </div>
         </div>
-        
-        <button 
-          onClick={() => fileInputRef.current?.click()} 
-          className="bg-white/10 hover:bg-orange-500 w-12 h-12 rounded-2xl flex items-center justify-center text-orange-400 hover:text-white transition-all shadow-inner group"
-          title="تحميل صورة من جهازك"
-        >
-          <i className="fas fa-file-image text-xl group-hover:scale-110 transition-transform"></i>
-        </button>
 
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          accept="image/*" 
-          onChange={handleFileUpload} 
-        />
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <form onSubmit={handleSearch} className="relative flex-1 md:w-64">
+            <input 
+              type="text" 
+              placeholder="ابحث عن معلم بالاسم..." 
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="w-full bg-white/5 border border-yellow-600/30 rounded-full py-2 px-10 text-sm focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all text-yellow-100 placeholder-yellow-900"
+            />
+            <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-yellow-600/50 text-xs"></i>
+          </form>
+          
+          <button onClick={() => fileInputRef.current?.click()} className="bg-yellow-600/10 hover:bg-yellow-600/20 w-10 h-10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-600/30 transition-all">
+            <i className="fas fa-image"></i>
+          </button>
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => { stopCamera(); performAnalysis("ما هذا المعلم؟", reader.result as string); };
+              reader.readAsDataURL(file);
+            }
+          }} />
+        </div>
       </header>
 
-      <main className="w-full max-w-4xl px-4 flex-1 flex flex-col py-6">
+      <main className="w-full max-w-5xl px-4 flex-1 flex flex-col py-6">
         {isScanning && (
-          <div className="flex-1 flex flex-col gap-6 animate-in fade-in max-w-2xl mx-auto w-full">
-            <div className="text-center py-4 space-y-2">
-               <h2 className="text-3xl font-black text-white">استمتع بجولتك</h2>
-               <p className="text-orange-200/60 text-sm">وجه الكاميرا نحو المعلم أو ارفع صورة لفتح بوابة المعرفة</p>
+          <div className="flex-1 flex flex-col gap-6 animate-in fade-in w-full max-w-2xl mx-auto">
+            <div className="text-center py-4">
+               <h2 className="text-3xl font-black text-yellow-500 drop-shadow-lg">إستكشف بروحك</h2>
+               <p className="text-yellow-600/60 text-sm">وجه عدستك نحو التاريخ ليبوح بأسراره</p>
             </div>
-            <div className="relative rounded-[3rem] overflow-hidden border-4 border-orange-500/30 shadow-2xl aspect-[3/4] bg-emerald-900/50">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,1)] animate-[scan_2s_ease-in-out_infinite]"></div>
+            <div className="relative rounded-[3rem] overflow-hidden border-4 border-yellow-600/20 shadow-[0_0_50px_rgba(234,179,8,0.1)] aspect-[3/4] bg-emerald-950/20">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover grayscale-[0.3]" />
+              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-yellow-500 shadow-[0_0_20px_rgba(234,179,8,1)] animate-[scan_3s_infinite]"></div>
               <div className="absolute bottom-10 left-0 w-full flex justify-center">
-                <button onClick={capturePhoto} className="w-20 h-20 bg-white rounded-full p-1 border-4 border-orange-500 shadow-2xl active:scale-95 transition-transform">
-                  <div className="w-full h-full bg-orange-500 rounded-full flex items-center justify-center text-white text-xl">
-                    <i className="fas fa-camera"></i>
+                <button onClick={() => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = videoRef.current!.videoWidth;
+                  canvas.height = videoRef.current!.videoHeight;
+                  canvas.getContext('2d')!.drawImage(videoRef.current!, 0, 0);
+                  stopCamera();
+                  performAnalysis("تعرف على هذا المعلم الأثري بدقة", canvas.toDataURL('image/jpeg'));
+                }} className="w-20 h-20 bg-black/60 backdrop-blur-md rounded-full p-1 border-2 border-yellow-500 shadow-2xl hover:scale-105 transition-transform group">
+                  <div className="w-full h-full bg-gradient-to-br from-yellow-400 to-yellow-700 rounded-full flex items-center justify-center text-black">
+                    <i className="fas fa-camera text-2xl"></i>
                   </div>
                 </button>
               </div>
@@ -270,137 +223,104 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {(loading || (nearbyLoading && !result)) && (
-          <div className="flex-1 flex flex-col items-center justify-center animate-in fade-in py-10">
-            <div className="w-full relative rounded-[3rem] overflow-hidden border-2 border-orange-500/30 shadow-2xl min-h-[400px] flex items-center justify-center bg-emerald-900/40">
-                {image && (
-                    <img src={image} className="absolute inset-0 w-full h-full object-cover opacity-40 blur-sm scale-110 transition-all duration-1000" alt="تحميل" />
-                )}
-                <div className="relative z-10 flex flex-col items-center space-y-6">
-                    <div className="relative w-32 h-32">
-                        <div className="absolute inset-0 border-[4px] border-orange-500/10 rounded-full"></div>
-                        <div className="absolute inset-0 border-[4px] border-t-orange-500 rounded-full animate-spin"></div>
-                        <div className="absolute inset-0 flex items-center justify-center text-orange-500 text-4xl">
-                            <i className="fas fa-compass animate-pulse"></i>
-                        </div>
-                    </div>
-                    <div className="text-center">
-                        <p className="text-3xl font-black text-white drop-shadow-lg">استمتع بتجوالك...</p>
-                        <p className="text-orange-400 font-bold text-sm tracking-widest mt-2 uppercase">نحن نكتب لك المخطوطة</p>
-                    </div>
-                </div>
+        {loading && (
+          <div className="flex-1 flex flex-col items-center justify-center py-20">
+            <div className="relative">
+              <div className="w-32 h-32 border-2 border-yellow-600/20 rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 border-t-2 border-yellow-500 rounded-full animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center text-yellow-500 text-3xl">
+                <i className="fas fa-feather-pointed animate-bounce"></i>
+              </div>
             </div>
+            <p className="mt-8 text-2xl font-black text-yellow-500 animate-pulse tracking-widest">إستمتع بتجوالك...</p>
           </div>
         )}
 
         {result && !loading && (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-8 pb-20 w-full">
-            <div className="relative w-full h-[350px] md:h-[450px] rounded-[3rem] overflow-hidden shadow-2xl border-2 border-orange-500/20 group">
-                {image ? (
-                  <img src={image} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" alt={result.title} />
-                ) : (
-                  <div className="w-full h-full bg-emerald-900 flex flex-col items-center justify-center relative overflow-hidden">
-                     <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')]"></div>
-                     <i className="fas fa-feather-pointed text-8xl text-orange-500/20 animate-pulse relative z-10"></i>
-                     <p className="text-orange-400/50 mt-4 font-bold text-xs uppercase tracking-widest">مخطوطة استكشافية</p>
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/30 to-transparent"></div>
-                
-                <button 
-                  onClick={startCamera} 
-                  className="absolute top-6 left-6 bg-emerald-950/80 backdrop-blur-md text-orange-400 px-6 py-3 rounded-full text-xs font-black border border-orange-500/30 shadow-xl hover:bg-orange-500 hover:text-white transition-all z-20"
-                >
-                    <i className="fas fa-sync-alt ml-2"></i> استكشاف جديد
-                </button>
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-12 pb-20 w-full">
+            <div className="text-center space-y-4">
+              <div className="inline-block p-6 rounded-full bg-yellow-600/10 border border-yellow-500/30 shadow-[0_0_30px_rgba(234,179,8,0.2)] mb-4">
+                <i className="fas fa-landmark text-6xl text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]"></i>
+              </div>
+              <h3 className="text-4xl md:text-6xl font-black text-yellow-500 drop-shadow-lg tracking-tight px-4">{result.title}</h3>
+              <div className="flex justify-center gap-4">
+                <button onClick={startCamera} className="bg-yellow-600/10 hover:bg-yellow-600/20 text-yellow-500 border border-yellow-500/30 px-6 py-2 rounded-full text-xs font-bold transition-all"><i className="fas fa-camera ml-2"></i> عدسة جديدة</button>
+              </div>
+            </div>
 
-                <div className="absolute bottom-8 right-8 text-white text-right left-8">
-                    <h3 className="text-4xl md:text-5xl font-black mb-6 drop-shadow-2xl">{result.title}</h3>
-                    <div className="flex justify-end gap-3">
-                        <button 
-                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(result.title)}`)}
-                          className="bg-orange-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg flex items-center gap-3 hover:bg-orange-600 active:scale-95 transition-all"
-                        >
-                          <i className="fas fa-map-marked-alt text-xl"></i>
-                          فتح الخريطة
-                        </button>
+            <div className="relative papyrus-container rounded-[2rem] shadow-2xl p-8 md:p-20 space-y-16 border-t-4 border-yellow-700/50">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#d4b483] border-4 border-[#8b4513] w-16 h-16 rounded-full flex items-center justify-center text-[#8b4513] shadow-xl">
+                  <i className="fas fa-scroll text-2xl"></i>
+                </div>
+
+                <section className="space-y-8 text-right">
+                    <div className="flex items-center justify-end gap-6">
+                        <button onClick={() => readText(result.history, 'history')} className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${readingSection === 'history' ? 'bg-red-800 text-white animate-pulse' : 'bg-[#8b4513] text-yellow-400'}`}><i className={`fas ${readingSection === 'history' ? 'fa-stop' : 'fa-play'}`}></i></button>
+                        <h4 className="text-[#5d4037] font-black text-2xl md:text-3xl border-b-4 border-[#8b4513]/20 pb-2">سفر الخلود والتاريخ</h4>
                     </div>
+                    <div className="text-[#2d2d2d] text-xl md:text-2xl leading-[2.4] font-bold text-justify first-letter:text-5xl first-letter:font-black first-letter:text-[#8b4513] whitespace-pre-wrap selection:bg-[#8b4513]/20">{result.history}</div>
+                </section>
+
+                <section className="space-y-8 text-right bg-[#000]/5 p-8 rounded-3xl border border-[#8b4513]/10">
+                    <div className="flex items-center justify-end gap-6">
+                        <button onClick={() => readText(result.architecture, 'arch')} className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${readingSection === 'arch' ? 'bg-red-800 text-white animate-pulse' : 'bg-[#8b4513] text-yellow-400'}`}><i className={`fas ${readingSection === 'arch' ? 'fa-stop' : 'fa-play'}`}></i></button>
+                        <h4 className="text-[#5d4037] font-black text-2xl border-b-4 border-[#8b4513]/20 pb-2">عبقرية العمارة والتشييد</h4>
+                    </div>
+                    <div className="text-[#3e2723] text-xl leading-loose text-justify italic font-medium">{result.architecture}</div>
+                </section>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-10">
+                    {result.funFacts.map((fact, idx) => (
+                      <div key={idx} className="bg-white/40 backdrop-blur-sm border-2 border-[#8b4513]/10 p-6 rounded-3xl text-right flex flex-col items-end group hover:border-[#8b4513]/40 transition-all shadow-sm">
+                        <div className="w-10 h-10 bg-[#8b4513] rounded-xl flex items-center justify-center text-yellow-500 mb-4 shadow-md group-hover:scale-110 transition-transform">
+                          <i className="fas fa-star text-sm"></i>
+                        </div>
+                        <p className="text-[#2d2d2d] text-sm font-black leading-relaxed">{fact}</p>
+                      </div>
+                    ))}
                 </div>
             </div>
 
-            {/* نصوص ورق البردى */}
-            <div className="relative papyrus-container rounded-[2rem] overflow-hidden shadow-2xl p-8 md:p-16 space-y-16 border-2 border-[#d4b483]/30">
-                <section className="space-y-6 text-right relative z-10">
-                    <div className="flex items-center justify-end gap-4">
-                        <button onClick={() => readText(result.history, 'history')} className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${readingSection === 'history' ? 'bg-[#8b4513] text-white animate-pulse' : 'bg-black/10 text-[#5d4037]'}`}>
-                            <i className={`fas ${readingSection === 'history' ? 'fa-stop' : 'fa-volume-up'}`}></i>
-                        </button>
-                        <h4 className="text-[#8b4513] font-black text-sm tracking-widest uppercase border-b-2 border-[#8b4513]/20 pb-1">السجل التاريخي للمخطوطة</h4>
-                    </div>
-                    <div className="text-[#2d2d2d] text-lg md:text-xl leading-[2.2] font-bold text-justify whitespace-pre-wrap drop-shadow-sm">{result.history}</div>
-                </section>
-
-                <hr className="border-[#8b4513]/10" />
-
-                <section className="space-y-6 text-right relative z-10">
-                    <div className="flex items-center justify-end gap-4">
-                        <button onClick={() => readText(result.architecture, 'arch')} className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${readingSection === 'arch' ? 'bg-[#8b4513] text-white animate-pulse' : 'bg-black/10 text-[#5d4037]'}`}>
-                            <i className={`fas ${readingSection === 'arch' ? 'fa-stop' : 'fa-volume-up'}`}></i>
-                        </button>
-                        <h4 className="text-[#8b4513] font-black text-sm tracking-widest uppercase border-b-2 border-[#8b4513]/20 pb-1">الوصف الهندسي والمعماري</h4>
-                    </div>
-                    <div className="text-[#3e2723] text-lg leading-loose text-justify whitespace-pre-wrap bg-white/10 p-8 rounded-[1.5rem] border border-[#8b4513]/5 italic">{result.architecture}</div>
-                </section>
-
-                {result.funFacts.length > 0 && (
-                  <section className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-                    {result.funFacts.map((fact, i) => (
-                      <div key={i} className="bg-[#8b4513]/5 border border-[#8b4513]/10 p-6 rounded-2xl text-right hover:bg-[#8b4513]/10 transition-colors">
-                        <span className="text-[#8b4513] font-black block mb-2 underline decoration-[#8b4513]/20">ملاحظة {i+1}</span>
-                        <p className="text-[#3e2723] text-sm font-bold">{fact}</p>
-                      </div>
-                    ))}
-                  </section>
-                )}
-            </div>
-
-            <div className="space-y-10">
-                {!nearbyLandmarks.length && !nearbyLoading && (
-                    <button 
-                      onClick={findNearby} 
-                      className="w-full bg-orange-500 hover:bg-orange-600 text-white py-7 rounded-[2.5rem] font-black shadow-xl shadow-orange-500/20 flex items-center justify-center gap-4 transition-all"
-                    >
-                        <i className="fas fa-scroll text-2xl"></i>
-                        <span>كشف المعالم المجاورة في المنطقة</span>
+            <div className="space-y-12">
+                {allDiscoveredLandmarks.length === 0 && !nearbyLoading && (
+                    <button onClick={findNearby} className="w-full bg-gradient-to-r from-yellow-600 to-yellow-800 hover:from-yellow-500 hover:to-yellow-700 text-black py-8 rounded-[3rem] font-black shadow-[0_10px_40px_rgba(234,179,8,0.2)] flex items-center justify-center gap-6 transition-all group">
+                        <i className="fas fa-map-marked-alt text-3xl group-hover:rotate-12 transition-transform"></i>
+                        <span className="text-xl">كشف بوابات التاريخ القريبة (12 معلماً)</span>
                     </button>
                 )}
 
                 {nearbyLoading && (
-                    <div className="bg-white/5 p-12 rounded-[3rem] text-center border border-white/10 animate-pulse">
-                        <i className="fas fa-compass text-4xl text-orange-500 animate-spin mb-4"></i>
-                        <p className="text-orange-400 font-black text-xl">نحدد الإحداثيات المجاورة...</p>
-                    </div>
+                  <div className="w-full py-20 flex flex-col items-center gap-6 bg-yellow-500/5 rounded-[3rem] border border-yellow-500/10">
+                    <div className="w-16 h-16 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin"></div>
+                    <p className="text-yellow-500 font-bold tracking-widest uppercase text-sm">جاري قراءة الخارطة الأثرية...</p>
+                  </div>
                 )}
 
-                {nearbyLandmarks.length > 0 && (
-                    <div className="space-y-8 animate-in slide-in-from-bottom-6">
-                        <h4 className="text-white font-black text-3xl text-center">بوابات استكشافية قريبة</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {nearbyLandmarks.map((landmark, idx) => (
-                                <div key={idx} className="bg-emerald-900/40 border border-white/10 p-6 rounded-[2rem] text-right flex flex-col justify-between hover:border-orange-500/60 transition-all group">
-                                    <div className="flex justify-between items-start mb-6">
-                                        <span className="bg-orange-500/20 text-orange-400 px-4 py-1.5 rounded-full text-[10px] font-black">
-                                            {landmark.direction} // {landmark.distance}
-                                        </span>
+                {allDiscoveredLandmarks.length > 0 && (
+                    <div className="space-y-10 animate-in slide-in-from-bottom-6">
+                        <div className="text-center space-y-2">
+                          <h4 className="text-yellow-500 font-black text-4xl">المعالم المتبقية للاستكشاف</h4>
+                          <p className="text-yellow-600/40 text-sm">رحلتك مستمرة.. اختر وجهتك التالية</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            {allDiscoveredLandmarks
+                              /* حذف المعلم المولد حالياً من قائمة الكروت بالأسفل */
+                              .filter(l => l.name.trim() !== result.title.trim())
+                              .map((landmark, idx) => (
+                                <div key={idx} className="bg-[#0a201c] border border-yellow-600/20 overflow-hidden rounded-[2.5rem] text-right flex flex-col group hover:border-yellow-500 transition-all shadow-2xl">
+                                    <div className="h-48 w-full bg-gradient-to-b from-yellow-900/20 to-transparent flex items-center justify-center relative">
+                                        <div className="w-24 h-24 rounded-full bg-yellow-600/5 border border-yellow-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.1)] group-hover:shadow-[0_0_40px_rgba(234,179,8,0.3)] transition-all">
+                                          <i className={`fas ${landmark.icon || 'fa-landmark'} text-4xl text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]`}></i>
+                                        </div>
+                                        <div className="absolute top-6 right-6 bg-yellow-600/20 backdrop-blur-md text-yellow-500 px-4 py-1.5 rounded-full text-[10px] font-black border border-yellow-500/20">{landmark.distance}</div>
                                     </div>
-                                    <h5 className="text-white font-black text-xl mb-3">{landmark.name}</h5>
-                                    <p className="text-slate-400 text-xs leading-relaxed mb-6">{landmark.brief}</p>
-                                    <button 
-                                      onClick={() => analyzeImage(null, landmark.name)} 
-                                      className="w-full bg-white/5 group-hover:bg-orange-500 text-orange-400 group-hover:text-white py-3 rounded-2xl text-xs font-black transition-all"
-                                    >
-                                        فتح المخطوطة التاريخية
-                                    </button>
+                                    <div className="p-8 flex-1 flex flex-col justify-between">
+                                        <div>
+                                          <h5 className="text-yellow-500 font-black text-lg mb-4">{landmark.name}</h5>
+                                          <p className="text-yellow-100/40 text-xs leading-relaxed mb-8 line-clamp-3">{landmark.brief}</p>
+                                        </div>
+                                        <button onClick={() => handleSelectLandmark(landmark)} className="w-full bg-yellow-500 text-black py-4 rounded-2xl text-xs font-black transition-all hover:bg-yellow-400 active:scale-95">فتح المخطوطة</button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -409,56 +329,22 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-
-        {error && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-red-950/10 rounded-[3rem] border border-red-500/20">
-             <i className="fas fa-exclamation-triangle text-5xl text-red-500 mb-6"></i>
-             <p className="text-white font-bold text-lg mb-8">{error}</p>
-             <button onClick={startCamera} className="bg-orange-500 text-white px-12 py-4 rounded-2xl font-black">إعادة المحاولة</button>
-          </div>
-        )}
       </main>
 
-      <footer className="py-12 opacity-30 text-center w-full">
-         <p className="text-[10px] font-black uppercase text-orange-400 tracking-widest">View Tours // Ancient Knowledge Explorer</p>
-      </footer>
-
       <style>{`
-        @keyframes scan {
-          0%, 100% { top: 10%; opacity: 0; }
-          50% { top: 90%; opacity: 1; }
-        }
-        body { background-color: #022c22; direction: rtl; }
-        
+        @keyframes scan { 0%, 100% { top: 10%; opacity: 0; } 50% { top: 90%; opacity: 1; } }
+        body { background-color: #021512; direction: rtl; }
         .papyrus-container {
             background-color: #e4d5b7;
-            background-image: 
-                linear-gradient(rgba(228, 213, 183, 0.95), rgba(228, 213, 183, 0.95)),
-                url('https://www.transparenttextures.com/patterns/natural-paper.png');
-            box-shadow: 
-                inset 0 0 100px rgba(139, 69, 19, 0.1),
-                0 20px 50px rgba(0, 0, 0, 0.3);
+            background-image: linear-gradient(rgba(228, 213, 183, 0.97), rgba(228, 213, 183, 0.97)), url('https://www.transparenttextures.com/patterns/natural-paper.png');
+            box-shadow: inset 0 0 100px rgba(139, 69, 19, 0.15), 0 30px 60px rgba(0, 0, 0, 0.5);
             position: relative;
         }
-
         .papyrus-container::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: 
-                repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(139, 69, 19, 0.03) 41px, transparent 42px),
-                repeating-linear-gradient(0deg, transparent, transparent 30px, rgba(139, 69, 19, 0.03) 31px, transparent 32px);
+            content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(139, 69, 19, 0.02) 41px, transparent 42px);
             pointer-events: none;
-        }
-
-        .papyrus-container::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            border: 20px solid transparent;
-            border-image: url('https://www.transparenttextures.com/patterns/rough-cloth.png') 30 round;
-            opacity: 0.1;
-            pointer-events: none;
+            opacity: 0.5;
         }
       `}</style>
     </div>
