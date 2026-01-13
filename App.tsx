@@ -42,9 +42,9 @@ const translations: Record<string, any> = {
     footerCustom: "ياللا بينا - LET'S GO رفيقك على الطريق",
     copied: "تم نسخ النص بنجاح!",
     sharingFile: "جاري تحضير ملف المعلومات للمشاركة...",
-    googleImages: "بحث عن صور في جوجل",
-    imageUrlPlaceholder: "ضع رابط صورة المعلم هنا",
-    showImage: "عرض الصورة"
+    googleImages: "جوجل",
+    imageUrlPlaceholder: "رابط الصورة",
+    showImage: "عرض"
   },
   en: {
     appName: "LET'S GO",
@@ -65,9 +65,9 @@ const translations: Record<string, any> = {
     footerCustom: "ياللا بينا - LET'S GO رفيقك على الطريق",
     copied: "Text copied successfully!",
     sharingFile: "Preparing information file for sharing...",
-    googleImages: "Search Google Images",
-    imageUrlPlaceholder: "Paste landmark image URL here",
-    showImage: "Show Image"
+    googleImages: "Google",
+    imageUrlPlaceholder: "Image URL",
+    showImage: "Show"
   }
 };
 
@@ -411,7 +411,7 @@ const App: React.FC = () => {
           <div className="space-y-12 pb-20 w-full">
             <div className="text-center space-y-6 no-print">
               <div className="space-y-4">
-                <h3 className="text-[26px] md:text-[26px] font-black text-yellow-500 drop-shadow-2xl">{result.title}</h3>
+                <h3 className="text-[26px] font-black text-yellow-500 drop-shadow-2xl">{result.title}</h3>
                 
                 {result.imageUrl && (
                   <div className="max-w-2xl mx-auto mb-8 rounded-[2rem] overflow-hidden border-4 border-yellow-500/20 shadow-2xl bg-black/20">
@@ -419,25 +419,26 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex flex-col items-center gap-3">
-                  {result.googleImagesLink && (
-                    <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-[#005a66]/20 text-[#90EE90] px-4 py-1.5 rounded-full text-sm font-bold border border-[#005a66]/50 hover:bg-[#005a66]/40 transition-all">
-                      <i className="fab fa-google"></i> {t.googleImages}
-                    </a>
-                  )}
-                  
-                  <div className="w-full max-w-md px-4 flex flex-col gap-2">
+                <div className="w-full max-w-lg mx-auto px-2">
+                  <div className="flex items-center gap-1.5 bg-white/5 border border-yellow-600/20 rounded-full p-1 shadow-inner">
+                    {result.googleImagesLink && (
+                      <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-[#005a66]/30 text-[#90EE90] px-3 py-1.5 rounded-full text-[10px] md:text-xs font-bold hover:bg-[#005a66]/50 transition-all">
+                        <i className="fab fa-google"></i> <span className="hidden xs:inline">{t.googleImages}</span>
+                      </a>
+                    )}
+                    
                     <input 
                       type="text" 
                       placeholder={t.imageUrlPlaceholder}
                       value={manualImageUrl}
                       onChange={(e) => setManualImageUrl(e.target.value)}
                       onKeyDown={handleManualImageUrlKeyDown}
-                      className="w-full bg-white/5 border border-yellow-600/30 rounded-full py-2.5 px-6 text-sm focus:outline-none focus:border-yellow-500 text-yellow-100 text-center shadow-lg"
+                      className="flex-1 bg-transparent border-none py-1 px-2 text-xs md:text-sm focus:outline-none text-yellow-100 min-w-0"
                     />
+
                     <button 
                       onClick={updateImageFromManualUrl}
-                      className="bg-[#005a66] hover:bg-[#00707c] text-white px-6 py-2 rounded-full text-xs font-bold transition-all self-center"
+                      className="shrink-0 bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black transition-all active:scale-95"
                     >
                       {t.showImage}
                     </button>
@@ -509,6 +510,9 @@ const App: React.FC = () => {
             background-color: #e4d5b7;
             background-image: linear-gradient(rgba(228, 213, 183, 0.98), rgba(228, 213, 183, 0.98)), url('https://www.transparenttextures.com/patterns/natural-paper.png');
             box-shadow: inset 0 0 100px rgba(139, 69, 19, 0.15), 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+        @media (max-width: 400px) {
+          .xs\\:inline { display: inline !important; }
         }
       `}</style>
     </div>
