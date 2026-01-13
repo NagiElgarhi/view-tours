@@ -8,6 +8,8 @@ interface AnalysisResult {
   history: string;
   architecture: string;
   funFacts: string[];
+  imageUrl?: string;
+  googleImagesLink?: string;
   nearbyLandmarks?: { name: string; distance: string; direction: string; description: string }[];
 }
 
@@ -39,7 +41,10 @@ const translations: Record<string, any> = {
     tryAgain: "حاول مرة أخرى",
     footerCustom: "ياللا بينا - LET'S GO رفيقك على الطريق",
     copied: "تم نسخ النص بنجاح!",
-    sharingFile: "جاري تحضير ملف المعلومات للمشاركة..."
+    sharingFile: "جاري تحضير ملف المعلومات للمشاركة...",
+    googleImages: "بحث عن صور في جوجل",
+    imageUrlPlaceholder: "ضع رابط صورة المعلم هنا",
+    showImage: "عرض الصورة"
   },
   en: {
     appName: "LET'S GO",
@@ -59,12 +64,16 @@ const translations: Record<string, any> = {
     tryAgain: "Try Again",
     footerCustom: "ياللا بينا - LET'S GO رفيقك على الطريق",
     copied: "Text copied successfully!",
-    sharingFile: "Preparing information file for sharing..."
+    sharingFile: "Preparing information file for sharing...",
+    googleImages: "Search Google Images",
+    imageUrlPlaceholder: "Paste landmark image URL here",
+    showImage: "Show Image"
   }
 };
 
 const App: React.FC = () => {
   const [searchText, setSearchText] = useState("");
+  const [manualImageUrl, setManualImageUrl] = useState("");
   const [selectedLang, setSelectedLang] = useState('ar');
   const [isScanning, setIsScanning] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,6 +101,7 @@ const App: React.FC = () => {
     setError(null);
     setReadingSection(null);
     setCapturedImage(null);
+    setManualImageUrl("");
     window.speechSynthesis.cancel();
     
     try {
@@ -121,7 +131,7 @@ const App: React.FC = () => {
     return str.replace(/```json/g, '').replace(/```/g, '').trim();
   };
 
-  const generateHtmlContent = (title: string, history: string, arch: string, nearby: any[] = []) => {
+  const generateHtmlContent = (title: string, history: string, arch: string, nearby: any[] = [], googleLink?: string, imgUrl?: string) => {
     const isRtl = selectedLang === 'ar';
     return `
       <!DOCTYPE html>
@@ -132,21 +142,25 @@ const App: React.FC = () => {
         <style>
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #fafafa; color: #333; margin: 0; }
           .container { max-width: 100%; }
-          h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 8px; font-size: 24px; text-align: center; }
+          h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 8px; font-size: 26px; text-align: center; }
           h2 { color: #5d4037; font-size: 20px; margin-top: 25px; border-inline-start: 4px solid #8b4513; padding-inline-start: 10px; }
           p { line-height: 1.6; font-size: 16px; text-align: justify; color: #444; }
+          .main-img { width: 100%; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
           .section { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
           .nearby-grid { display: block; }
           .nearby-item { background: #fff; padding: 12px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #eee; box-shadow: 0 1px 4px rgba(0,0,0,0.03); }
           .landmark-name { font-weight: bold; color: #8b4513; display: block; margin-bottom: 4px; font-size: 17px; }
           .meta { font-size: 12px; color: #005a66; font-weight: bold; display: flex; gap: 10px; margin-bottom: 5px; }
           .desc { font-size: 14px; color: #666; }
+          .google-link { display: block; text-align: center; margin: 15px 0; color: #005a66; text-decoration: none; font-weight: bold; }
           .footer { margin-top: 40px; padding: 20px; border-top: 1px solid #ddd; font-weight: bold; font-size: 14px; color: #8b4513; text-align: center; background: #fff9c4; border-radius: 8px; }
         </style>
       </head>
       <body>
         <div class="container">
           <h1>${title}</h1>
+          ${imgUrl ? `<img src="${imgUrl}" class="main-img" alt="${title}">` : ''}
+          ${googleLink ? `<a href="${googleLink}" class="google-link">${t.googleImages}</a>` : ''}
           
           <div class="section">
             <h2>${t.historyTitle}</h2>
@@ -192,7 +206,7 @@ const App: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
       
-      const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search to verify all facts.
+      const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search to verify all facts and find a real public image URL of the landmark.
       Provide the response in ${langName} language.
       Return ONLY a JSON object:
       {
@@ -200,6 +214,8 @@ const App: React.FC = () => {
         "history": "Detailed accurate history (min 500 words)",
         "architecture": "A comprehensive architectural analysis (min 300 words).",
         "funFacts": ["Fact 1", "Fact 2", "Fact 3", "Fact 4", "Fact 5", "Fact 6"],
+        "imageUrl": "A direct URL to a high-quality image of this landmark from a trusted source. If not found, omit this field.",
+        "googleImagesLink": "A direct search link for images of this landmark on Google.",
         "nearbyLandmarks": [{"name": "Landmark Name", "distance": "e.g. 300m", "direction": "Cardinal direction from the main landmark, e.g., North, Southeast", "description": "short description"}] 
       }
       IMPORTANT: Find up to 12 real landmarks strictly within 1000 meters of this location. For each, specify the EXACT distance in meters and the REAL cardinal direction relative to the main landmark.`;
@@ -220,6 +236,12 @@ const App: React.FC = () => {
       });
 
       const data = JSON.parse(cleanJsonString(response.text || '{}'));
+      if (!data.googleImagesLink && data.title) {
+        data.googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(data.title)}`;
+      }
+      if (manualImageUrl) {
+        data.imageUrl = manualImageUrl;
+      }
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -273,10 +295,12 @@ const App: React.FC = () => {
   const shareDiscovery = async (isHtml: boolean = false) => {
     if (!result) return;
     if (isHtml) {
-      const html = generateHtmlContent(result.title, result.history, result.architecture, result.nearbyLandmarks);
+      const html = generateHtmlContent(result.title, result.history, result.architecture, result.nearbyLandmarks, result.googleImagesLink, result.imageUrl);
       await handleFileShare(html, result.title);
     } else {
-      const fullText = `*${result.title}*\n\n*${t.historyTitle}:*\n${result.history}\n\n*${t.archTitle}:*\n${result.architecture}\n\n${t.footerCustom}`;
+      const imgPart = result.imageUrl ? `\n\n🖼️ رابط الصورة:\n${result.imageUrl}` : "";
+      const googlePart = result.googleImagesLink ? `\n\n🔍 ${t.googleImages}:\n${result.googleImagesLink}` : "";
+      const fullText = `*${result.title}*${imgPart}${googlePart}\n\n*${t.historyTitle}:*\n${result.history}\n\n*${t.archTitle}:*\n${result.architecture}\n\n${t.footerCustom}`;
       executeShare(fullText);
     }
   };
@@ -293,6 +317,18 @@ const App: React.FC = () => {
       document.execCommand('copy');
       document.body.removeChild(textArea);
       alert(t.copied);
+    }
+  };
+
+  const updateImageFromManualUrl = () => {
+    if (manualImageUrl.trim()) {
+      setResult(prev => prev ? {...prev, imageUrl: manualImageUrl.trim()} : null);
+    }
+  };
+
+  const handleManualImageUrlKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      updateImageFromManualUrl();
     }
   };
 
@@ -374,7 +410,40 @@ const App: React.FC = () => {
         {result && !loading && (
           <div className="space-y-12 pb-20 w-full">
             <div className="text-center space-y-6 no-print">
-              <h3 className="text-5xl md:text-7xl font-black text-yellow-500 drop-shadow-2xl">{result.title}</h3>
+              <div className="space-y-4">
+                <h3 className="text-[26px] md:text-[26px] font-black text-yellow-500 drop-shadow-2xl">{result.title}</h3>
+                
+                {result.imageUrl && (
+                  <div className="max-w-2xl mx-auto mb-8 rounded-[2rem] overflow-hidden border-4 border-yellow-500/20 shadow-2xl bg-black/20">
+                    <img src={result.imageUrl} alt={result.title} className="w-full h-auto object-cover max-h-[400px]" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  </div>
+                )}
+
+                <div className="flex flex-col items-center gap-3">
+                  {result.googleImagesLink && (
+                    <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-[#005a66]/20 text-[#90EE90] px-4 py-1.5 rounded-full text-sm font-bold border border-[#005a66]/50 hover:bg-[#005a66]/40 transition-all">
+                      <i className="fab fa-google"></i> {t.googleImages}
+                    </a>
+                  )}
+                  
+                  <div className="w-full max-w-md px-4 flex flex-col gap-2">
+                    <input 
+                      type="text" 
+                      placeholder={t.imageUrlPlaceholder}
+                      value={manualImageUrl}
+                      onChange={(e) => setManualImageUrl(e.target.value)}
+                      onKeyDown={handleManualImageUrlKeyDown}
+                      className="w-full bg-white/5 border border-yellow-600/30 rounded-full py-2.5 px-6 text-sm focus:outline-none focus:border-yellow-500 text-yellow-100 text-center shadow-lg"
+                    />
+                    <button 
+                      onClick={updateImageFromManualUrl}
+                      className="bg-[#005a66] hover:bg-[#00707c] text-white px-6 py-2 rounded-full text-xs font-bold transition-all self-center"
+                    >
+                      {t.showImage}
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button onClick={startCamera} className="bg-yellow-600/10 border-2 border-yellow-500/30 px-8 py-3 rounded-full text-sm font-black text-yellow-500 hover:bg-yellow-600/20 transition-all">
                 <i className="fas fa-camera ml-2"></i> {t.newDiscovery}
               </button>
@@ -397,7 +466,6 @@ const App: React.FC = () => {
                     <div className="text-[#3e2723] text-lg leading-relaxed text-justify italic font-serif whitespace-pre-wrap">{result.architecture}</div>
                 </section>
 
-                {/* Nearby Landmarks integrated into the main container */}
                 {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
                   <section className="space-y-8 pt-4 border-t-2 border-brown-900/10">
                     <h4 className="text-[#4e342e] font-black text-3xl text-center">{t.nearbyTitle}</h4>
@@ -421,11 +489,9 @@ const App: React.FC = () => {
                 <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10">
                    <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareTitle}</p>
                    <div className="flex gap-8">
-                      {/* Copy Button */}
                       <button onClick={() => shareDiscovery(false)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 active:scale-95 bg-[#4e342e] text-yellow-400">
                          <i className="fas fa-copy"></i>
                       </button>
-                      {/* Share Button (using generic share icon) */}
                       <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 active:scale-95 bg-yellow-600 text-white">
                          <i className="fas fa-share-nodes"></i>
                       </button>
