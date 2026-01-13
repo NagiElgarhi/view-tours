@@ -34,8 +34,8 @@ const translations: Record<string, any> = {
     shareTitle: "مشاركة المعلومات",
     shareNearbyTitle: "مشاركة قائمة المعالم المحيطة",
     historyTitle: "التسلسل التاريخي",
-    archTitle: "التصميم المعماري",
-    nearbyTitle: "معالم محيطة (في نطاق 1000 متر)",
+    archTitle: "التصميم معمارياً",
+    nearbyTitle: "معالم محيطة بموقعك الحالي",
     errorCamera: "يرجى تفعيل صلاحية الكاميرا للاستمرار.",
     errorConnection: "حدث خطأ أثناء الاتصال بسجلات التاريخ.",
     tryAgain: "حاول مرة أخرى",
@@ -58,7 +58,7 @@ const translations: Record<string, any> = {
     shareNearbyTitle: "Share Nearby Places",
     historyTitle: "Historical Timeline",
     archTitle: "Architectural Design",
-    nearbyTitle: "Nearby Landmarks (within 1000m)",
+    nearbyTitle: "Landmarks around your location",
     errorCamera: "Please enable camera permissions.",
     errorConnection: "Error connecting to records.",
     tryAgain: "Try Again",
@@ -127,6 +127,20 @@ const App: React.FC = () => {
     setIsScanning(false);
   };
 
+  const getCurrentLocation = (): Promise<GeolocationPosition | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve(position),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+  };
+
   const cleanJsonString = (str: string) => {
     return str.replace(/```json/g, '').replace(/```/g, '').trim();
   };
@@ -142,7 +156,7 @@ const App: React.FC = () => {
         <style>
           body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #fafafa; color: #333; margin: 0; }
           .container { max-width: 100%; }
-          h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 8px; font-size: 26px; text-align: center; }
+          h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 8px; font-size: 26px; text-align: center; line-height: 1.4; }
           h2 { color: #5d4037; font-size: 20px; margin-top: 25px; border-inline-start: 4px solid #8b4513; padding-inline-start: 10px; }
           p { line-height: 1.6; font-size: 16px; text-align: justify; color: #444; }
           .main-img { width: 100%; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -158,7 +172,7 @@ const App: React.FC = () => {
       </head>
       <body>
         <div class="container">
-          <h1>${title}</h1>
+          <h1>${title.split(' أو ').join('<br>')}</h1>
           ${imgUrl ? `<img src="${imgUrl}" class="main-img" alt="${title}">` : ''}
           ${googleLink ? `<a href="${googleLink}" class="google-link">${t.googleImages}</a>` : ''}
           
@@ -203,14 +217,20 @@ const App: React.FC = () => {
     window.speechSynthesis.cancel();
 
     try {
+      const position = await getCurrentLocation();
+      const locationContext = position 
+        ? `The user is currently at Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}.`
+        : "User location is unavailable.";
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
       
-      const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search to verify all facts and find a real public image URL of the landmark.
+      const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search and Google Maps data to verify all facts and find a real public image URL of the landmark.
+      ${locationContext} Use this GPS location to find the most relevant landmarks around the user.
       Provide the response in ${langName} language.
       Return ONLY a JSON object:
       {
-        "title": "Name of landmark",
+        "title": "Name of landmark (If it has a famous alternative name, provide it as 'Main Name أو Second Name')",
         "history": "Detailed accurate history (min 500 words)",
         "architecture": "A comprehensive architectural analysis (min 300 words).",
         "funFacts": ["Fact 1", "Fact 2", "Fact 3", "Fact 4", "Fact 5", "Fact 6"],
@@ -218,7 +238,7 @@ const App: React.FC = () => {
         "googleImagesLink": "A direct search link for images of this landmark on Google.",
         "nearbyLandmarks": [{"name": "Landmark Name", "distance": "e.g. 300m", "direction": "Cardinal direction from the main landmark, e.g., North, Southeast", "description": "short description"}] 
       }
-      IMPORTANT: Find up to 12 real landmarks strictly within 1000 meters of this location. For each, specify the EXACT distance in meters and the REAL cardinal direction relative to the main landmark.`;
+      IMPORTANT: Find up to 12 real landmarks strictly within 1000 meters of the provided GPS coordinates. For each, specify the EXACT distance in meters and the REAL cardinal direction relative to the user's current position.`;
 
       const contents: any = imageData 
         ? { parts: [{ inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } }, { text: prompt }] }
@@ -411,7 +431,9 @@ const App: React.FC = () => {
           <div className="space-y-12 pb-20 w-full">
             <div className="text-center space-y-6 no-print">
               <div className="space-y-4">
-                <h3 className="text-[26px] font-black text-yellow-500 drop-shadow-2xl">{result.title}</h3>
+                <h3 className="text-[26px] font-black text-yellow-500 drop-shadow-2xl whitespace-pre-line leading-tight">
+                  {result.title.split(' أو ').join('\nأو\n')}
+                </h3>
                 
                 {result.imageUrl && (
                   <div className="max-w-2xl mx-auto mb-8 rounded-[2rem] overflow-hidden border-4 border-yellow-500/20 shadow-2xl bg-black/20">
@@ -419,11 +441,11 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <div className="w-full max-w-lg mx-auto px-2">
-                  <div className="flex items-center gap-1.5 bg-white/5 border border-yellow-600/20 rounded-full p-1 shadow-inner">
+                <div className="w-full max-w-md mx-auto px-1">
+                  <div className="flex items-center gap-1 bg-white/5 border border-yellow-600/20 rounded-full p-1 shadow-inner overflow-hidden">
                     {result.googleImagesLink && (
-                      <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-[#005a66]/30 text-[#90EE90] px-3 py-1.5 rounded-full text-[10px] md:text-xs font-bold hover:bg-[#005a66]/50 transition-all">
-                        <i className="fab fa-google"></i> <span className="hidden xs:inline">{t.googleImages}</span>
+                      <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-[#005a66]/30 text-[#90EE90] px-2.5 py-2 rounded-full text-[10px] md:text-xs font-bold hover:bg-[#005a66]/50 transition-all">
+                        <i className="fab fa-google"></i> <span className="xs:inline">{t.googleImages}</span>
                       </a>
                     )}
                     
@@ -433,19 +455,22 @@ const App: React.FC = () => {
                       value={manualImageUrl}
                       onChange={(e) => setManualImageUrl(e.target.value)}
                       onKeyDown={handleManualImageUrlKeyDown}
-                      className="flex-1 bg-transparent border-none py-1 px-2 text-xs md:text-sm focus:outline-none text-yellow-100 min-w-0"
+                      className="flex-1 bg-transparent border-none py-1.5 px-2 text-[11px] md:text-sm focus:outline-none text-yellow-100 min-w-0"
                     />
 
                     <button 
-                      onClick={updateImageFromManualUrl}
-                      className="shrink-0 bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-1.5 rounded-full text-[10px] md:text-xs font-black transition-all active:scale-95"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        updateImageFromManualUrl();
+                      }}
+                      className="shrink-0 bg-yellow-600 hover:bg-yellow-500 text-black px-3.5 py-2 rounded-full text-[10px] md:text-xs font-black transition-all active:scale-95 touch-manipulation"
                     >
                       {t.showImage}
                     </button>
                   </div>
                 </div>
               </div>
-              <button onClick={startCamera} className="bg-yellow-600/10 border-2 border-yellow-500/30 px-8 py-3 rounded-full text-sm font-black text-yellow-500 hover:bg-yellow-600/20 transition-all">
+              <button onClick={startCamera} className="bg-white border-2 border-[#005a66]/30 px-8 py-3 rounded-full text-sm font-black text-[#005a66] hover:bg-slate-50 transition-all shadow-xl">
                 <i className="fas fa-camera ml-2"></i> {t.newDiscovery}
               </button>
             </div>
@@ -511,8 +536,8 @@ const App: React.FC = () => {
             background-image: linear-gradient(rgba(228, 213, 183, 0.98), rgba(228, 213, 183, 0.98)), url('https://www.transparenttextures.com/patterns/natural-paper.png');
             box-shadow: inset 0 0 100px rgba(139, 69, 19, 0.15), 0 20px 50px rgba(0, 0, 0, 0.5);
         }
-        @media (max-width: 400px) {
-          .xs\\:inline { display: inline !important; }
+        @media (max-width: 450px) {
+          .xs\\:inline { display: inline-block !important; }
         }
       `}</style>
     </div>
