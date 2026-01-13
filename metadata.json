@@ -1,5 +1,5 @@
 {
-  "name": "View Tours",
+  "name": "LET'S GO",
   "description": "An AI-powered travel companion that identifies landmarks and historical buildings via camera or image upload, providing rich historical context and tours.",
   "requestFramePermissions": [
     "camera"
