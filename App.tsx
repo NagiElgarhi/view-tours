@@ -440,11 +440,18 @@ const App: React.FC = () => {
                     <img src={result.imageUrl} alt={result.title} className="w-full h-auto object-cover max-h-[400px]" onError={(e) => (e.currentTarget.style.display = 'none')} />
                   </div>
                 )}
+              </div>
+              <button onClick={startCamera} className="bg-white border-2 border-[#005a66]/30 px-8 py-3 rounded-full text-sm font-black text-[#005a66] hover:bg-slate-50 transition-all shadow-xl">
+                <i className="fas fa-camera ml-2"></i> {t.newDiscovery}
+              </button>
+            </div>
 
-                <div className="w-full max-w-md mx-auto px-1">
-                  <div className="flex items-center gap-1 bg-white/5 border border-yellow-600/20 rounded-full p-1 shadow-inner overflow-hidden">
+            <div className="relative papyrus-container rounded-[3rem] shadow-2xl p-10 md:p-20 space-y-16" dir={selectedLang === 'ar' ? 'rtl' : 'ltr'}>
+                {/* Image Input Container - Moved here and adjusted width */}
+                <div className="w-[80%] mx-auto no-print">
+                  <div className="flex items-center gap-1 bg-white/40 border border-[#4e342e]/30 rounded-full p-1 shadow-md overflow-hidden">
                     {result.googleImagesLink && (
-                      <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-[#005a66]/30 text-[#90EE90] px-2.5 py-2 rounded-full text-[10px] md:text-xs font-bold hover:bg-[#005a66]/50 transition-all">
+                      <a href={result.googleImagesLink} target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-[#4e342e] text-yellow-400 px-2.5 py-2 rounded-full text-[10px] md:text-xs font-bold hover:bg-[#3e2723] transition-all">
                         <i className="fab fa-google"></i> <span className="xs:inline">{t.googleImages}</span>
                       </a>
                     )}
@@ -455,7 +462,7 @@ const App: React.FC = () => {
                       value={manualImageUrl}
                       onChange={(e) => setManualImageUrl(e.target.value)}
                       onKeyDown={handleManualImageUrlKeyDown}
-                      className="flex-1 bg-transparent border-none py-1.5 px-2 text-[11px] md:text-sm focus:outline-none text-yellow-100 min-w-0"
+                      className="flex-1 bg-transparent border-none py-1.5 px-2 text-[11px] md:text-sm focus:outline-none text-[#1a1a1a] placeholder-[#4e342e]/50 min-w-0"
                     />
 
                     <button 
@@ -469,13 +476,7 @@ const App: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </div>
-              <button onClick={startCamera} className="bg-white border-2 border-[#005a66]/30 px-8 py-3 rounded-full text-sm font-black text-[#005a66] hover:bg-slate-50 transition-all shadow-xl">
-                <i className="fas fa-camera ml-2"></i> {t.newDiscovery}
-              </button>
-            </div>
 
-            <div className="relative papyrus-container rounded-[3rem] shadow-2xl p-10 md:p-20 space-y-16" dir={selectedLang === 'ar' ? 'rtl' : 'ltr'}>
                 <section className="space-y-6">
                     <div className="flex items-center justify-between border-b-2 border-brown-900/10 pb-4">
                         <h4 className="text-[#4e342e] font-black text-3xl">{t.historyTitle}</h4>
