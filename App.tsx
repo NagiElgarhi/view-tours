@@ -28,8 +28,8 @@ const translations: Record<string, any> = {
     searchPlaceholder: "اكتب اسم المعلم...",
     loading: "جاري الاستكشاف من مصادر موثوقة...",
     newDiscovery: "استكشاف جديد",
-    shareTitle: "شارك الاكتشاف",
-    shareNearbyTitle: "شارك قائمة المعالم المحيطة",
+    shareTitle: "مشاركة المعلومات",
+    shareNearbyTitle: "مشاركة قائمة المعالم المحيطة",
     historyTitle: "التسلسل التاريخي",
     archTitle: "التصميم المعماري",
     nearbyTitle: "معالم محيطة (في نطاق 1000 متر)",
@@ -47,7 +47,7 @@ const translations: Record<string, any> = {
     searchPlaceholder: "Landmark name...",
     loading: "Exploring from trusted sources...",
     newDiscovery: "New Discovery",
-    shareTitle: "Share Discovery",
+    shareTitle: "Share Information",
     shareNearbyTitle: "Share Nearby Places",
     historyTitle: "Historical Timeline",
     archTitle: "Architectural Design",
@@ -230,7 +230,7 @@ const App: React.FC = () => {
         });
       } catch (err) {
         console.error("Share failed", err);
-        window.open(`https://wa.me/?text=${encodeURIComponent(fileName)}`);
+        executeShare(fileName);
       }
     } else {
       const url = URL.createObjectURL(file);
@@ -241,56 +241,29 @@ const App: React.FC = () => {
     }
   };
 
-  const shareDiscovery = async (platform?: string) => {
+  const shareDiscovery = async (isHtml: boolean = false) => {
     if (!result) return;
-    const fullText = `*${result.title}*\n\n*${t.historyTitle}:*\n${result.history}\n\n*${t.archTitle}:*\n${result.architecture}\n\n${t.generatedBy}`;
-    
-    if (platform === 'whatsapp') {
+    if (isHtml) {
       const html = generateHtmlContent(result.title, result.history, t.archTitle, result.architecture);
       await handleFileShare(html, result.title);
     } else {
-      executeShare(fullText, platform);
+      const fullText = `*${result.title}*\n\n*${t.historyTitle}:*\n${result.history}\n\n*${t.archTitle}:*\n${result.architecture}\n\n${t.generatedBy}`;
+      executeShare(fullText);
     }
   };
 
-  const shareNearby = async (platform?: string) => {
-    if (!result || !result.nearbyLandmarks) return;
-    const nearbyText = `*المعالم المحيطة بـ ${result.title} (نطاق 1000م):*\n\n` + 
-      result.nearbyLandmarks.map(l => `📍 ${l.name}\n📏 المسافة: ${l.distance}\n🧭 الاتجاه: ${l.direction}\n📝 ${l.description}`).join('\n\n') +
-      `\n\n${t.generatedBy}`;
-
-    if (platform === 'whatsapp') {
-      const html = generateHtmlContent(`${t.nearbyTitle} - ${result.title}`, "", "", "", result.nearbyLandmarks);
-      await handleFileShare(html, `Nearby_${result.title}`);
-    } else {
-      executeShare(nearbyText, platform);
-    }
-  };
-
-  const executeShare = async (text: string, platform?: string) => {
-    if (platform === 'twitter') {
-      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text.substring(0, 280))}`);
-    } else if (platform === 'facebook') {
-      const dummy = document.createElement("textarea");
-      document.body.appendChild(dummy);
-      dummy.value = text;
-      dummy.select();
-      document.execCommand("copy");
-      document.body.removeChild(dummy);
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`);
-    } else {
-      try {
-        await navigator.clipboard.writeText(text);
-        alert(t.copied);
-      } catch (err) {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert(t.copied);
-      }
+  const executeShare = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(t.copied);
+    } catch (err) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert(t.copied);
     }
   };
 
@@ -392,48 +365,41 @@ const App: React.FC = () => {
                     <div className="text-[#3e2723] text-lg leading-relaxed text-justify italic font-serif whitespace-pre-wrap">{result.architecture}</div>
                 </section>
 
-                <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10">
-                   <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareTitle}</p>
-                   <div className="flex gap-4">
-                      {['whatsapp', 'facebook', 'twitter', 'copy'].map(p => (
-                        <button key={p} onClick={() => shareDiscovery(p === 'copy' ? undefined : p)} className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-md transition-transform hover:scale-110 active:scale-95 ${p === 'whatsapp' ? 'bg-[#25D366] text-white' : p === 'facebook' ? 'bg-[#1877F2] text-white' : p === 'twitter' ? 'bg-[#1DA1F2] text-white' : 'bg-[#4e342e] text-yellow-400'}`}>
-                          <i className={`fab fa-${p === 'copy' ? '' : p} ${p === 'copy' ? 'fas fa-copy' : ''} ${p === 'twitter' ? 'fa-x-twitter' : ''} ${p === 'whatsapp' ? 'fa-whatsapp' : ''}`}></i>
+                {/* Nearby Landmarks integrated into the main container */}
+                {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
+                  <section className="space-y-8 pt-4 border-t-2 border-brown-900/10">
+                    <h4 className="text-[#4e342e] font-black text-3xl text-center">{t.nearbyTitle}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {result.nearbyLandmarks.slice(0, 12).map((landmark, idx) => (
+                        <button key={idx} onClick={() => performAnalysis(`Identify landmark: ${landmark.name}`)} className="bg-[#5d4037]/5 hover:bg-[#5d4037]/10 border border-brown-900/10 p-4 rounded-2xl text-start transition-all group flex flex-col gap-1">
+                          <div className="flex justify-between items-start">
+                            <span className="text-[#3e2723] font-bold text-lg group-hover:text-yellow-800">{landmark.name}</span>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="bg-yellow-700/10 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full">{landmark.distance}</span>
+                              <span className="bg-[#005a66] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">🧭 {landmark.direction}</span>
+                            </div>
+                          </div>
+                          <p className="text-[#1a1a1a] text-xs opacity-70 line-clamp-1">{landmark.description}</p>
                         </button>
                       ))}
+                    </div>
+                  </section>
+                )}
+
+                <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10">
+                   <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareTitle}</p>
+                   <div className="flex gap-8">
+                      {/* Copy Button */}
+                      <button onClick={() => shareDiscovery(false)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 active:scale-95 bg-[#4e342e] text-yellow-400">
+                         <i className="fas fa-copy"></i>
+                      </button>
+                      {/* Share Button (replacing WhatsApp specific icon with generic share) */}
+                      <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 active:scale-95 bg-yellow-600 text-white">
+                         <i className="fas fa-share-nodes"></i>
+                      </button>
                    </div>
                 </div>
             </div>
-
-            {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
-              <div className="relative papyrus-container rounded-[3rem] shadow-2xl p-10 md:p-16 space-y-10" dir={selectedLang === 'ar' ? 'rtl' : 'ltr'}>
-                <h4 className="text-[#4e342e] font-black text-3xl md:text-5xl text-center">{t.nearbyTitle}</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {result.nearbyLandmarks.slice(0, 12).map((landmark, idx) => (
-                    <button key={idx} onClick={() => performAnalysis(`Identify landmark: ${landmark.name}`)} className="bg-[#5d4037]/5 hover:bg-[#5d4037]/10 border border-brown-900/20 p-6 rounded-3xl text-start transition-all group flex flex-col gap-2">
-                      <div className="flex justify-between items-start">
-                        <span className="text-[#3e2723] font-black text-xl group-hover:text-yellow-800">{landmark.name}</span>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="bg-yellow-700/20 text-yellow-900 text-xs font-bold px-3 py-1 rounded-full">{landmark.distance}</span>
-                          <span className="bg-[#005a66] text-white text-[10px] font-bold px-3 py-0.5 rounded-full uppercase">🧭 {landmark.direction}</span>
-                        </div>
-                      </div>
-                      <p className="text-[#1a1a1a] text-sm opacity-80 line-clamp-2">{landmark.description}</p>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10">
-                   <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareNearbyTitle}</p>
-                   <div className="flex gap-4">
-                      {['whatsapp', 'facebook', 'twitter', 'copy'].map(p => (
-                        <button key={p} onClick={() => shareNearby(p === 'copy' ? undefined : p)} className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-md transition-transform hover:scale-110 active:scale-95 ${p === 'whatsapp' ? 'bg-[#25D366] text-white' : p === 'facebook' ? 'bg-[#1877F2] text-white' : p === 'twitter' ? 'bg-[#1DA1F2] text-white' : 'bg-[#4e342e] text-yellow-400'}`}>
-                          <i className={`fab fa-${p === 'copy' ? '' : p} ${p === 'copy' ? 'fas fa-copy' : ''} ${p === 'twitter' ? 'fa-x-twitter' : ''} ${p === 'whatsapp' ? 'fa-whatsapp' : ''}`}></i>
-                        </button>
-                      ))}
-                   </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </main>
