@@ -45,7 +45,8 @@ const translations: Record<string, any> = {
     googleImages: "جوجل",
     uploadImages: "أضف صورك للتقرير",
     directionTo: "الاتجاه إلى",
-    searchGoogle: "بحث جوجل"
+    searchGoogle: "بحث جوجل",
+    facebookShare: "فيسبوك"
   },
   en: {
     appName: "Yalla Bina",
@@ -69,7 +70,8 @@ const translations: Record<string, any> = {
     googleImages: "Google",
     uploadImages: "Add Photos to Report",
     directionTo: "Direction to",
-    searchGoogle: "Google Search"
+    searchGoogle: "Google Search",
+    facebookShare: "Facebook"
   }
 };
 
@@ -200,8 +202,8 @@ const App: React.FC = () => {
         ? `The user is currently at Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}.`
         : "User location is unavailable.";
 
-      // Use the correct initialization pattern with process.env.API_KEY
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Correctly initialize GoogleGenAI with named parameter apiKey
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
       
       const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search and Google Maps.
@@ -225,7 +227,7 @@ const App: React.FC = () => {
       }
       parts.push({ text: prompt });
 
-      // Call generateContent with model name and contents directly as per guidelines
+      // Using gemini-3-pro-preview for complex tasks as per guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: { parts },
@@ -237,7 +239,7 @@ const App: React.FC = () => {
         }
       });
 
-      // Correctly access text property (not a function)
+      // Fixed: Using .text property instead of method and handling response properly
       const data = JSON.parse(cleanJsonString(response.text || '{}'));
       if (!data.googleImagesLink && data.title) {
         data.googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(data.title)}`;
@@ -281,7 +283,9 @@ const App: React.FC = () => {
       reportImages.push(...uploadedImages);
       
       const html = generateHtmlContent(result.title, result.about, reportImages);
-      const file = new File([html], `${result.title}.html`, { type: 'text/html' });
+      // Fixed: Creating the File blob correctly
+      const blob = new Blob([html], { type: 'text/html' });
+      const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
       const shareData: any = { files: [file], title: result.title };
       if (navigator.canShare && (navigator as any).canShare(shareData)) {
         await navigator.share(shareData);
@@ -297,6 +301,13 @@ const App: React.FC = () => {
       await navigator.clipboard.writeText(fullText);
       alert(t.copied);
     }
+  };
+
+  const shareToFacebook = () => {
+    if (!result) return;
+    const url = window.location.href; // Can be replaced with a specific discovery URL if applicable
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(`اكتشفت ${result.title} عبر View Tours!\n\n${result.about.substring(0, 100)}...`)}`;
+    window.open(fbUrl, '_blank', 'width=600,height=400');
   };
 
   const handleManualPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -506,6 +517,13 @@ const App: React.FC = () => {
                           <i className="fas fa-share-nodes"></i>
                         </button>
                         <span className="text-[#4e342e] text-[10px] font-black">{t.shareCombined}</span>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-2">
+                        <button onClick={shareToFacebook} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-[#1877F2] text-white">
+                          <i className="fab fa-facebook-f"></i>
+                        </button>
+                        <span className="text-[#4e342e] text-[10px] font-black">{t.facebookShare}</span>
                       </div>
 
                       {result?.locationLink && (
