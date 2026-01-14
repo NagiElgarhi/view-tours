@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, GenerateContentParameters } from "@google/genai";
 
 // Types
 interface AnalysisResult {
@@ -30,7 +30,7 @@ const translations: Record<string, any> = {
     snapHint: "صور المعلم لتعرف حكايته وما حوله",
     searchPlaceholder: "اكتب اسم المعلم...",
     loading: "جاري الاستكشاف",
-    loadingSub: "من مصادر موثوقة",
+    loadingSub: "بحث سريع ودقيق (أقل من 30 ثانية)",
     newDiscovery: "استكشاف جديد",
     shareTitle: "مشاركة المعلومات",
     shareCombined: "مشاركة الصور والنصوص",
@@ -55,7 +55,7 @@ const translations: Record<string, any> = {
     snapHint: "Snap the landmark to hear its story",
     searchPlaceholder: "Landmark name...",
     loading: "Exploring",
-    loadingSub: "from trusted sources",
+    loadingSub: "Fast and precise search (< 30s)",
     newDiscovery: "New Discovery",
     shareTitle: "Share Information",
     shareCombined: "Share Photos & Text",
@@ -199,48 +199,66 @@ const App: React.FC = () => {
     try {
       const position = await getCurrentLocation();
       const locationContext = position 
-        ? `The user is currently at Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}.`
-        : "User location is unavailable.";
+        ? `Coordinates: ${position.coords.latitude}, ${position.coords.longitude}.`
+        : "Coordinates unavailable.";
 
-      // Correctly initialize GoogleGenAI with named parameter apiKey
+      // Initializing GoogleGenAI correctly with process.env.API_KEY
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
       
-      const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search and Google Maps.
-      ${locationContext} First, identify the exact landmark. Then find exactly 26 real historical landmarks strictly within 1000 meters (1km) of that location.
-      Provide the response in ${langName} language.
-      Return ONLY a JSON object:
+      const systemInstruction = `You are a world-class historian and tour guide. 
+      CRITICAL: You MUST respond in under 20 seconds. 
+      GEOSPATIAL: Identify the primary landmark, then provide exactly 26 additional points of interest strictly within a 1000m (1km) radius of these coordinates.
+      Language: ${langName}.
+      Context: ${locationContext}
+      Output format: ONLY a JSON object:
       {
-        "title": "Name of landmark",
-        "about": "A massive, detailed article (exactly 600 words) combining both the complete historical timeline and a professional architectural analysis of the site.",
-        "funFacts": ["Fact 1", "Fact 2", "Fact 3", "Fact 4", "Fact 5", "Fact 6"],
-        "imageUrl": "A direct URL to a high-quality image of this landmark.",
-        "googleImagesLink": "A search link for images.",
-        "locationLink": "Google Maps link to the main landmark",
-        "nearbyLandmarks": [{"name": "Landmark Name", "distance": "distance", "direction": "direction", "description": "short desc"}] 
+        "title": "Landmark Name",
+        "about": "A detailed historical and architectural overview (min 400 words).",
+        "googleImagesLink": "Google Images search URL",
+        "locationLink": "Google Maps location URL",
+        "nearbyLandmarks": [{"name": "Landmark Name", "distance": "dist", "direction": "dir", "description": "short desc"}]
       }
-      IMPORTANT: "about" field MUST be exactly 600 words. "nearbyLandmarks" MUST contain up to 26 items if available, ALL strictly within 1000m.`;
+      Strictly limit to 1000m radius. Max speed and accuracy required.`;
 
-      let parts: any[] = [];
+      let params: GenerateContentParameters;
       if (imageData) {
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } });
+        params = {
+          model: 'gemini-3-flash-preview',
+          contents: {
+            parts: [
+              { inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } },
+              { text: prompt }
+            ]
+          },
+          config: { 
+            systemInstruction, 
+            responseMimeType: "application/json", 
+            temperature: 0.1,
+            tools: [{ googleSearch: {} }]
+          }
+        };
+      } else {
+        params = {
+          model: 'gemini-3-flash-preview',
+          contents: prompt,
+          config: { 
+            systemInstruction, 
+            responseMimeType: "application/json", 
+            temperature: 0.1,
+            tools: [{ googleSearch: {} }]
+          }
+        };
       }
-      parts.push({ text: prompt });
 
-      // Using gemini-3-pro-preview for complex tasks as per guidelines
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: { parts },
-        config: { 
-          systemInstruction, 
-          responseMimeType: "application/json", 
-          temperature: 0.1,
-          tools: [{ googleSearch: {} }]
-        }
-      });
+      // Using correct generateContent method
+      const response: GenerateContentResponse = await ai.models.generateContent(params);
 
-      // Fixed: Using .text property instead of method and handling response properly
-      const data = JSON.parse(cleanJsonString(response.text || '{}'));
+      // Accessing text content via .text property
+      const textResponse = response.text;
+      if (!textResponse) throw new Error("No response text");
+
+      const data = JSON.parse(cleanJsonString(textResponse));
       if (!data.googleImagesLink && data.title) {
         data.googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(data.title)}`;
       }
@@ -283,11 +301,17 @@ const App: React.FC = () => {
       reportImages.push(...uploadedImages);
       
       const html = generateHtmlContent(result.title, result.about, reportImages);
-      // Fixed: Creating the File blob correctly
-      const blob = new Blob([html], { type: 'text/html' });
+      // Fixing potential 'unknown' type issue by asserting to string
+      const blob = new Blob([html as string], { type: 'text/html' });
       const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
-      const shareData: any = { files: [file], title: result.title };
-      if (navigator.canShare && (navigator as any).canShare(shareData)) {
+      
+      const shareData: ShareData = {
+        files: [file],
+        title: result.title,
+        text: result.about.substring(0, 100)
+      };
+
+      if (navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
       } else {
         const url = URL.createObjectURL(file);
@@ -305,7 +329,7 @@ const App: React.FC = () => {
 
   const shareToFacebook = () => {
     if (!result) return;
-    const url = window.location.href; // Can be replaced with a specific discovery URL if applicable
+    const url = window.location.href;
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(`اكتشفت ${result.title} عبر View Tours!\n\n${result.about.substring(0, 100)}...`)}`;
     window.open(fbUrl, '_blank', 'width=600,height=400');
   };
@@ -367,8 +391,9 @@ const App: React.FC = () => {
                 const reader = new FileReader();
                 reader.onloadend = () => { 
                   stopCamera(); 
-                  setCapturedImage(reader.result as string);
-                  performAnalysis("Identify landmark", reader.result as string); 
+                  const res = reader.result as string;
+                  setCapturedImage(res);
+                  performAnalysis("Identify landmark", res); 
                 };
                 reader.readAsDataURL(file);
               }
@@ -514,7 +539,8 @@ const App: React.FC = () => {
                       
                       <div className="flex flex-col items-center gap-2">
                         <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-yellow-600 text-white">
-                          <i className="fas fa-share-nodes"></i>
+                          <i className="fas fa-share-nodes mr-1"></i>
+                          <i className="fab fa-facebook-f ml-1"></i>
                         </button>
                         <span className="text-[#4e342e] text-[10px] font-black">{t.shareCombined}</span>
                       </div>
