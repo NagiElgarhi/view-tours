@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
 // Types
 interface AnalysisResult {
@@ -33,6 +33,7 @@ const translations: Record<string, any> = {
     loadingSub: "من مصادر موثوقة",
     newDiscovery: "استكشاف جديد",
     shareTitle: "مشاركة المعلومات",
+    shareCombined: "مشاركة الصور والنصوص",
     aboutTitle: "عن الموقع",
     nearbyTitlePrefix: "معالم محيطة بـ ",
     errorCamera: "يرجى تفعيل صلاحية الكاميرا للاستمرار.",
@@ -56,6 +57,7 @@ const translations: Record<string, any> = {
     loadingSub: "from trusted sources",
     newDiscovery: "New Discovery",
     shareTitle: "Share Information",
+    shareCombined: "Share Photos & Text",
     aboutTitle: "About the Site",
     nearbyTitlePrefix: "Landmarks around ",
     errorCamera: "Please enable camera permissions.",
@@ -161,7 +163,7 @@ const App: React.FC = () => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
           body { font-family: 'Tajawal', sans-serif; font-weight: 700; padding: 20px; background: #fafafa; color: #333; margin: 0; line-height: 1.6; }
           .container { max-width: 800px; margin: 0 auto; }
           h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 10px; font-size: 28px; text-align: center; margin-bottom: 30px; font-weight: 900; }
@@ -175,16 +177,11 @@ const App: React.FC = () => {
       <body>
         <div class="container">
           <h1>${title}</h1>
-          
-          <div class="gallery">
-            ${imagesHtml}
-          </div>
-
+          <div class="gallery">${imagesHtml}</div>
           <div class="section">
             <h2>${t.aboutTitle}</h2>
             <p>${about}</p>
           </div>
-
           <div class="footer">${t.footerCustom}</div>
         </div>
       </body>
@@ -203,11 +200,12 @@ const App: React.FC = () => {
         ? `The user is currently at Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}.`
         : "User location is unavailable.";
 
+      // Use the correct initialization pattern with process.env.API_KEY
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
       
       const systemInstruction = `You are an expert historian. DO NOT hallucinate. Use Google Search and Google Maps.
-      ${locationContext} First, identify the exact landmark. Then find exactly 26 real historical landmarks strictly within 2000 meters of that location.
+      ${locationContext} First, identify the exact landmark. Then find exactly 26 real historical landmarks strictly within 1000 meters (1km) of that location.
       Provide the response in ${langName} language.
       Return ONLY a JSON object:
       {
@@ -219,7 +217,7 @@ const App: React.FC = () => {
         "locationLink": "Google Maps link to the main landmark",
         "nearbyLandmarks": [{"name": "Landmark Name", "distance": "distance", "direction": "direction", "description": "short desc"}] 
       }
-      IMPORTANT: "about" field MUST be exactly 600 words. "nearbyLandmarks" MUST contain up to 26 items if available.`;
+      IMPORTANT: "about" field MUST be exactly 600 words. "nearbyLandmarks" MUST contain up to 26 items if available, ALL strictly within 1000m.`;
 
       let parts: any[] = [];
       if (imageData) {
@@ -227,9 +225,10 @@ const App: React.FC = () => {
       }
       parts.push({ text: prompt });
 
+      // Call generateContent with model name and contents directly as per guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: [{ parts }],
+        contents: { parts },
         config: { 
           systemInstruction, 
           responseMimeType: "application/json", 
@@ -238,6 +237,7 @@ const App: React.FC = () => {
         }
       });
 
+      // Correctly access text property (not a function)
       const data = JSON.parse(cleanJsonString(response.text || '{}'));
       if (!data.googleImagesLink && data.title) {
         data.googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(data.title)}`;
@@ -282,9 +282,8 @@ const App: React.FC = () => {
       
       const html = generateHtmlContent(result.title, result.about, reportImages);
       const file = new File([html], `${result.title}.html`, { type: 'text/html' });
-      // FIX: Use explicit type for ShareData and cast to ensure TypeScript compatibility
-      const shareData: ShareData = { files: [file], title: result.title };
-      if (navigator.canShare && navigator.canShare(shareData)) {
+      const shareData: any = { files: [file], title: result.title };
+      if (navigator.canShare && (navigator as any).canShare(shareData)) {
         await navigator.share(shareData);
       } else {
         const url = URL.createObjectURL(file);
@@ -313,7 +312,6 @@ const App: React.FC = () => {
     });
 
     Promise.all(readers).then(newImages => {
-      // تعديل: إضافة الصور الجديدة إلى القائمة الحالية بدلاً من استبدالها
       setUploadedImages(prev => [...prev, ...newImages]);
     });
   };
@@ -331,12 +329,6 @@ const App: React.FC = () => {
                  </div>
                  <span className="text-[20px] font-black text-[#90EE90] tracking-widest uppercase leading-none opacity-80">{t.appGo}</span>
               </div>
-              <button 
-                onClick={startCamera}
-                className="mt-1 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-500 text-[10px] font-black px-4 py-1 rounded-full border border-yellow-500/30 transition-all uppercase tracking-widest active:scale-95 shadow-[0_0_15px_rgba(234,179,8,0.1)]"
-              >
-                <i className="fas fa-redo-alt mr-1"></i> {t.newDiscovery}
-              </button>
             </div>
             <select value={selectedLang} onChange={(e) => setSelectedLang(e.target.value)} className="bg-white/5 border border-yellow-600/30 rounded-full py-1.5 px-3 text-[11px] font-black text-yellow-500 focus:outline-none focus:border-yellow-500 cursor-pointer h-fit">
               {languages.map(lang => <option key={lang.code} value={lang.code} className="bg-[#021512]">{lang.native}</option>)}
@@ -347,7 +339,17 @@ const App: React.FC = () => {
               <input type="text" placeholder={t.searchPlaceholder} value={searchText} onChange={(e) => setSearchText(e.target.value)} className="w-full bg-white/5 border border-yellow-600/30 rounded-full py-2 px-10 text-sm font-bold focus:outline-none focus:border-yellow-500 text-yellow-100" />
               <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-yellow-600/50 text-xs"></i>
             </form>
-            <button onClick={() => fileInputRef.current?.click()} className="bg-yellow-600/10 hover:bg-yellow-600/20 w-10 h-10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-600/30"><i className="fas fa-camera"></i></button>
+            <div className="flex flex-col items-center gap-2">
+              <button onClick={() => fileInputRef.current?.click()} className="bg-yellow-600/10 hover:bg-yellow-600/20 w-10 h-10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-600/30 shadow-lg active:scale-90 transition-transform">
+                <i className="fas fa-camera"></i>
+              </button>
+              <button 
+                onClick={startCamera}
+                className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-500 text-[9px] font-black px-3 py-1 rounded-full border border-yellow-500/30 transition-all uppercase tracking-widest active:scale-95 shadow-[0_0_15px_rgba(234,179,8,0.1)]"
+              >
+                {t.newDiscovery}
+              </button>
+            </div>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -399,7 +401,7 @@ const App: React.FC = () => {
                   stopCamera();
                   setCapturedImage(dataUrl);
                   performAnalysis("Identify landmark", dataUrl);
-                }} className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-yellow-700 rounded-full flex items-center justify-center text-black shadow-2xl"><i className="fas fa-camera text-3xl"></i></button>
+                }} className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-yellow-700 rounded-full flex items-center justify-center text-black shadow-2xl active:scale-90 transition-transform"><i className="fas fa-camera text-3xl"></i></button>
               </div>
             </div>
           </div>
@@ -491,25 +493,31 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10 w-full">
                    <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareTitle}</p>
-                   <div className="flex gap-8 items-center justify-center flex-wrap">
-                      <button onClick={() => shareDiscovery(false)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-[#4e342e] text-yellow-400">
-                        <i className="fas fa-copy"></i>
-                      </button>
+                   <div className="flex gap-6 items-center justify-center flex-wrap">
+                      <div className="flex flex-col items-center gap-2">
+                        <button onClick={() => shareDiscovery(false)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-[#4e342e] text-yellow-400">
+                          <i className="fas fa-copy"></i>
+                        </button>
+                        <span className="text-[#4e342e] text-[10px] font-black">نسخ نص</span>
+                      </div>
                       
+                      <div className="flex flex-col items-center gap-2">
+                        <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-yellow-600 text-white">
+                          <i className="fas fa-share-nodes"></i>
+                        </button>
+                        <span className="text-[#4e342e] text-[10px] font-black">{t.shareCombined}</span>
+                      </div>
+
                       {result?.locationLink && (
                         <div className="flex flex-col items-center gap-2">
                            <a href={result.locationLink} target="_blank" className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-red-700 text-white">
                              <i className="fas fa-location-arrow"></i>
                            </a>
-                           <span className="text-[#4e342e] text-[10px] md:text-xs font-black text-center max-w-[80px]">
-                             {t.directionTo}<br/>{result.title}
+                           <span className="text-[#4e342e] text-[10px] font-black text-center max-w-[80px]">
+                             {t.directionTo}
                            </span>
                         </div>
                       )}
-                      
-                      <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-yellow-600 text-white">
-                        <i className="fas fa-share-nodes"></i>
-                      </button>
                    </div>
                 </div>
             </div>
