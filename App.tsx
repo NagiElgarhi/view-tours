@@ -1,77 +1,71 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, GenerateContentResponse, GenerateContentParameters } from "@google/genai";
+import { GoogleGenAI, GenerateContentParameters } from "@google/genai";
 
 // Types
 interface AnalysisResult {
   title: string;
-  about: string; // Combined history and architecture
-  funFacts: string[];
-  imageUrl?: string;
-  googleImagesLink?: string;
-  locationLink?: string; // New field for main landmark location
-  nearbyLandmarks?: { name: string; distance: string; direction: string; description: string }[];
+  about: string; 
+  nearbyLandmarks?: { name: string; distance: string; description: string; direction?: string }[];
+  locationLink?: string; 
+  notFound?: boolean;
 }
 
 const languages = [
   { code: 'ar', name: 'Arabic', native: 'العربية' },
   { code: 'en', name: 'English', native: 'English' },
-  { code: 'fr', name: 'French', native: 'Français' },
   { code: 'tr', name: 'Turkish', native: 'Türkçe' },
+  { code: 'fr', name: 'French', native: 'Français' },
   { code: 'de', name: 'German', native: 'Deutsch' },
-  { code: 'it', name: 'Italian', native: 'Italiano' }
+  { code: 'zh', name: 'Chinese', native: '中文' }
 ];
 
 const translations: Record<string, any> = {
   ar: {
-    appName: "يالا بينا",
-    appGo: "Let's Go",
-    explore: "ياللا بينا نستكشف",
-    snapHint: "صور المعلم لتعرف حكايته وما حوله",
-    searchPlaceholder: "اكتب اسم المعلم...",
-    loading: "جاري الاستكشاف",
-    loadingSub: "بحث سريع ودقيق (أقل من 30 ثانية)",
+    appName: "View Tours",
+    logoText: "فيو تورز",
+    searchPlaceholder: "ابحث عن معلم...",
+    loading: "متعة الإكتشاف",
+    waitingGeneration: "جاري عرض المعلومات...",
     newDiscovery: "استكشاف جديد",
-    shareTitle: "مشاركة المعلومات",
-    shareCombined: "مشاركة الصور والنصوص",
-    aboutTitle: "عن الموقع",
+    aboutTitle: "عن المعلم",
     nearbyTitlePrefix: "معالم محيطة بـ ",
-    errorCamera: "يرجى تفعيل صلاحية الكاميرا للاستمرار.",
-    errorConnection: "حدث خطأ أثناء الاتصال بسجلات التاريخ.",
-    tryAgain: "حاول مرة أخرى",
-    footerCustom: "View Tours - رفيقك على الطريق",
-    copied: "تم نسخ النص بنجاح!",
-    sharingFile: "جاري تحضير ملف المعلومات للمشاركة...",
-    googleImages: "جوجل",
-    uploadImages: "أضف صورك للتقرير",
-    directionTo: "الاتجاه إلى",
-    searchGoogle: "بحث جوجل",
-    facebookShare: "فيسبوك"
+    errorCamera: "يرجى تفعيل صلاحية الكاميرا.",
+    notFoundMessage: "لم يتم التعرف على المعلم، حاول مرة أخرى.",
+    expandHistory: "المزيد من المعلومات",
+    expandNearby: "استكشاف المعالم المحيطة",
+    loadingExpansion: "جاري التعمق...",
+    directions: "اتجاه",
+    share: "مشاركة",
+    copy: "نسخ",
+    copied: "تم النسخ",
+    confirmImages: "تأكد من صورة المعلم",
+    loadImages: "تحميل الصور",
+    imagesLoaded: "الصور جاهزة",
+    needApiKey: "يجب اختيار مفتاح API خاص بك"
   },
   en: {
-    appName: "Yalla Bina",
-    appGo: "Let's Go",
-    explore: "Let's Explore",
-    snapHint: "Snap the landmark to hear its story",
-    searchPlaceholder: "Landmark name...",
-    loading: "Exploring",
-    loadingSub: "Fast and precise search (< 30s)",
+    appName: "View Tours",
+    logoText: "View Tours",
+    searchPlaceholder: "Search landmark...",
+    loading: "Joy of Discovery",
+    waitingGeneration: "Displaying info...",
     newDiscovery: "New Discovery",
-    shareTitle: "Share Information",
-    shareCombined: "Share Photos & Text",
     aboutTitle: "About the Site",
-    nearbyTitlePrefix: "Landmarks around ",
+    nearbyTitlePrefix: "Nearby landmarks around ",
     errorCamera: "Please enable camera permissions.",
-    errorConnection: "Error connecting to records.",
-    tryAgain: "Try Again",
-    footerCustom: "View Tours - Your travel companion",
-    copied: "Text copied successfully!",
-    sharingFile: "Preparing information file for sharing...",
-    googleImages: "Google",
-    uploadImages: "Add Photos to Report",
-    directionTo: "Direction to",
-    searchGoogle: "Google Search",
-    facebookShare: "Facebook"
+    notFoundMessage: "Not recognized.",
+    expandHistory: "More Info",
+    expandNearby: "Explore Nearby Landmarks",
+    loadingExpansion: "Deep diving...",
+    directions: "Direction",
+    share: "Share",
+    copy: "Copy",
+    copied: "Copied",
+    confirmImages: "Confirm Images",
+    loadImages: "Load Photos",
+    imagesLoaded: "Photos Ready",
+    needApiKey: "Select your API Key"
   }
 };
 
@@ -80,23 +74,31 @@ const App: React.FC = () => {
   const [selectedLang, setSelectedLang] = useState('ar');
   const [isScanning, setIsScanning] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expanding, setExpanding] = useState(false);
+  const [countdown, setCountdown] = useState(20);
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false);
   const [readingSection, setReadingSection] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [hasExpandedHistory, setHasExpandedHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [copyStatus, setCopyStatus] = useState(false);
+  const [landmarkImages, setLandmarkImages] = useState<string[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const multiFileInputRef = useRef<HTMLInputElement>(null);
+  const resultGalleryInputRef = useRef<HTMLInputElement>(null);
+  const countdownIntervalRef = useRef<number | null>(null);
 
-  const t = translations[selectedLang] || translations.en;
+  const t = translations[selectedLang] || translations.ar;
 
   useEffect(() => {
     startCamera();
     return () => {
       stopCamera();
       window.speechSynthesis.cancel();
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
@@ -104,11 +106,9 @@ const App: React.FC = () => {
     setIsScanning(true);
     setResult(null);
     setError(null);
-    setReadingSection(null);
     setCapturedImage(null);
-    setUploadedImages([]);
-    window.speechSynthesis.cancel();
-    
+    setHasExpandedHistory(false);
+    setLandmarkImages([]);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'environment' } 
@@ -132,269 +132,186 @@ const App: React.FC = () => {
     setIsScanning(false);
   };
 
-  const getCurrentLocation = (): Promise<GeolocationPosition | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(null);
-        return;
+  const performAnalysis = async (prompt: string, imageData?: string, isExpansion = false, isNearbyExpansion = false) => {
+    if (isExpansion || isNearbyExpansion) setExpanding(true);
+    else setLoading(true);
+
+    if (imageData) setCapturedImage(imageData);
+
+    setCountdown(20);
+    setError(null);
+    setIsWaitingForAI(false);
+
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    countdownIntervalRef.current = window.setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current!);
+          setIsWaitingForAI(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      
+      let systemInstruction = `You are a world-class travel guide. Identify this landmark and provide details in JSON format. Language: ${selectedLang}.
+      The JSON must contain:
+      - title: name of the landmark.
+      - about: 150 words describing it.
+      - nearbyLandmarks: An array of 6 real landmarks within 1km. Each object MUST have 'name', 'distance' (e.g. "300 متر"), 'direction' (e.g. "شمال شرق"), and 'description'.`;
+      
+      if (isExpansion) {
+        systemInstruction = `Provide an extremely deep historical and architectural study of ${result?.title}. This text MUST be minimum 400 words long. Use professional tone. Format: JSON {about: string}. Language: ${selectedLang}.`;
+      } else if (isNearbyExpansion) {
+        systemInstruction = `Find exactly 26 real landmarks and interesting spots within 1km radius of ${result?.title}. Format: JSON {nearbyLandmarks: Array<{name, distance, direction, description}>}. Language: ${selectedLang}.`;
       }
-      navigator.geolocation.getCurrentPosition(
-        (position) => resolve(position),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: imageData 
+          ? { parts: [{ inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } }, { text: prompt }] }
+          : { parts: [{ text: prompt }] },
+        config: { systemInstruction, responseMimeType: "application/json" }
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      if (isExpansion) {
+        setResult(prev => prev ? { ...prev, about: data.about } : null);
+        setHasExpandedHistory(true);
+      } else if (isNearbyExpansion) {
+        setResult(prev => prev ? { ...prev, nearbyLandmarks: data.nearbyLandmarks } : null);
+      } else {
+        setResult(data as AnalysisResult);
+      }
+
+      setLoading(false);
+      setExpanding(false);
+      setIsWaitingForAI(false);
+    } catch (err: any) {
+      setLoading(false);
+      setExpanding(false);
+      setError(err.message?.includes("403") ? t.needApiKey : "Connection Error");
+    }
+  };
+
+  const handleMultipleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    setLoadingImages(true);
+    const newImages: string[] = [];
+    let processedCount = 0;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        newImages.push(reader.result as string);
+        processedCount++;
+        if (processedCount === files.length) {
+          setLandmarkImages(prev => [...prev, ...newImages]);
+          setLoadingImages(false);
+        }
+      };
+      reader.readAsDataURL(file);
     });
   };
 
-  const cleanJsonString = (str: string) => {
-    return str.replace(/```json/g, '').replace(/```/g, '').trim();
+  const copyToClipboard = () => {
+    if (!result) return;
+    const text = `${result.title}\n\n${result.about}\n\n${t.nearbyTitlePrefix}:\n${result.nearbyLandmarks?.map(l => `- ${l.name} (${l.distance} - ${l.direction})`).join('\n')}`;
+    navigator.clipboard.writeText(text);
+    setCopyStatus(true);
+    setTimeout(() => setCopyStatus(false), 2000);
   };
 
-  const generateHtmlContent = (title: string, about: string, userImages: string[] = []) => {
-    const isRtl = selectedLang === 'ar';
-    const imagesHtml = userImages.map(img => `
-      <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-        <img src="${img}" style="width: 7cm; height: 12cm; object-fit: cover; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 2px solid #8b4513;">
-      </div>
-    `).join('');
-    
-    return `
+  const shareAsHTML = async () => {
+    if (!result) return;
+    const allImgs = capturedImage ? [capturedImage, ...landmarkImages] : landmarkImages;
+    const htmlContent = `
       <!DOCTYPE html>
-      <html lang="${selectedLang}" dir="${isRtl ? 'rtl' : 'ltr'}">
+      <html lang="${selectedLang}" dir="${selectedLang === 'ar' ? 'rtl' : 'ltr'}">
       <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
-          body { font-family: 'Tajawal', sans-serif; font-weight: 700; padding: 20px; background: #fafafa; color: #333; margin: 0; line-height: 1.6; }
-          .container { max-width: 800px; margin: 0 auto; }
-          h1 { color: #8b4513; border-bottom: 3px solid #ffd700; padding-bottom: 10px; font-size: 28px; text-align: center; margin-bottom: 30px; font-weight: 900; }
-          h2 { color: #5d4037; font-size: 22px; margin-top: 30px; border-inline-start: 5px solid #8b4513; padding-inline-start: 15px; margin-bottom: 15px; font-weight: 900; }
-          p { font-size: 18px; text-align: justify; color: #444; margin: 0; font-weight: 700; }
-          .gallery { margin: 20px 0; display: flex; flex-direction: column; align-items: center; }
-          .section { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
-          .footer { margin-top: 50px; padding: 25px; border-top: 1px solid #ddd; font-weight: 900; font-size: 16px; color: #8b4513; text-align: center; background: #fff9c4; border-radius: 10px; }
+          body { font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333; background: #fdfdfd; }
+          .gallery { display: grid; grid-template-cols: 1fr 1fr; gap: 10px; margin: 20px 0; }
+          .gallery img { width: 100%; height: 200px; object-fit: cover; border-radius: 12px; }
+          .landmark { margin-bottom: 15px; padding: 15px; background: #f0f9ff; border-radius: 10px; }
         </style>
       </head>
       <body>
-        <div class="container">
-          <h1>${title}</h1>
-          <div class="gallery">${imagesHtml}</div>
-          <div class="section">
-            <h2>${t.aboutTitle}</h2>
-            <p>${about}</p>
-          </div>
-          <div class="footer">${t.footerCustom}</div>
-        </div>
+        <h1>${result.title}</h1>
+        <div class="gallery">${allImgs.map(url => `<img src="${url}" />`).join('')}</div>
+        <p>${result.about}</p>
+        <h2>${t.nearbyTitlePrefix} ${result.title}</h2>
+        ${result.nearbyLandmarks?.map(l => `<div class="landmark"><strong>${l.name} (${l.distance} - ${l.direction})</strong><p>${l.description}</p></div>`).join('')}
       </body>
-      </html>
-    `;
-  };
-
-  const performAnalysis = async (prompt: string, imageData?: string) => {
-    setLoading(true);
-    setError(null);
-    window.speechSynthesis.cancel();
-
-    try {
-      const position = await getCurrentLocation();
-      const locationContext = position 
-        ? `Coordinates: ${position.coords.latitude}, ${position.coords.longitude}.`
-        : "Coordinates unavailable.";
-
-      // Initializing GoogleGenAI correctly with process.env.API_KEY
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const langName = languages.find(l => l.code === selectedLang)?.name || 'Arabic';
-      
-      const systemInstruction = `You are a world-class historian and tour guide. 
-      CRITICAL: You MUST respond in under 20 seconds. 
-      GEOSPATIAL: Identify the primary landmark, then provide exactly 26 additional points of interest strictly within a 1000m (1km) radius of these coordinates.
-      Language: ${langName}.
-      Context: ${locationContext}
-      Output format: ONLY a JSON object:
-      {
-        "title": "Landmark Name",
-        "about": "A detailed historical and architectural overview (min 400 words).",
-        "googleImagesLink": "Google Images search URL",
-        "locationLink": "Google Maps location URL",
-        "nearbyLandmarks": [{"name": "Landmark Name", "distance": "dist", "direction": "dir", "description": "short desc"}]
-      }
-      Strictly limit to 1000m radius. Max speed and accuracy required.`;
-
-      let params: GenerateContentParameters;
-      if (imageData) {
-        params = {
-          model: 'gemini-3-flash-preview',
-          contents: {
-            parts: [
-              { inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } },
-              { text: prompt }
-            ]
-          },
-          config: { 
-            systemInstruction, 
-            responseMimeType: "application/json", 
-            temperature: 0.1,
-            tools: [{ googleSearch: {} }]
-          }
-        };
-      } else {
-        params = {
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-          config: { 
-            systemInstruction, 
-            responseMimeType: "application/json", 
-            temperature: 0.1,
-            tools: [{ googleSearch: {} }]
-          }
-        };
-      }
-
-      // Using correct generateContent method
-      const response: GenerateContentResponse = await ai.models.generateContent(params);
-
-      // Accessing text content via .text property
-      const textResponse = response.text;
-      if (!textResponse) throw new Error("No response text");
-
-      const data = JSON.parse(cleanJsonString(textResponse));
-      if (!data.googleImagesLink && data.title) {
-        data.googleImagesLink = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(data.title)}`;
-      }
-      if (!data.locationLink && data.title) {
-        data.locationLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.title)}`;
-      }
-      setResult(data);
-    } catch (err) {
-      console.error(err);
-      setError(t.errorConnection);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchText.trim()) return;
-    stopCamera();
-    performAnalysis(`Search for and identify: ${searchText}`);
-  };
-
-  const readText = (text: string, sectionId: string) => {
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      if (readingSection === sectionId) { return setReadingSection(null); }
-    }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = selectedLang === 'ar' ? 'ar-SA' : selectedLang === 'en' ? 'en-US' : selectedLang;
-    utterance.onstart = () => setReadingSection(sectionId);
-    utterance.onend = () => setReadingSection(null);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const shareDiscovery = async (isHtml: boolean = false) => {
-    if (!result) return;
-    if (isHtml) {
-      const reportImages = [];
-      if (capturedImage) reportImages.push(capturedImage);
-      reportImages.push(...uploadedImages);
-      
-      const html = generateHtmlContent(result.title, result.about, reportImages);
-      // Fixing potential 'unknown' type issue by asserting to string
-      const blob = new Blob([html as string], { type: 'text/html' });
-      const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
-      
-      const shareData: ShareData = {
-        files: [file],
-        title: result.title,
-        text: result.about.substring(0, 100)
-      };
-
-      if (navigator.canShare && navigator.canShare(shareData)) {
-        await navigator.share(shareData);
-      } else {
-        const url = URL.createObjectURL(file);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${result.title}.html`;
-        a.click();
+      </html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
+    
+    // Fix: Explicitly type the shareData to handle navigator.canShare requirements correctly
+    const shareData: ShareData = { files: [file], title: result.title, text: result.title };
+    
+    // Fix: cast navigator as any to handle potential missing types in older environments
+    const nav = navigator as any;
+    if (nav.canShare && nav.canShare(shareData)) {
+      try {
+        await nav.share(shareData);
+      } catch (e) {
+        console.error("Sharing failed", e);
       }
     } else {
-      const fullText = `*${result.title}*\n\n*${t.aboutTitle}:*\n${result.about}\n\n${t.footerCustom}`;
-      await navigator.clipboard.writeText(fullText);
-      alert(t.copied);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${result.title}.html`; a.click();
+      URL.revokeObjectURL(url);
     }
   };
 
-  const shareToFacebook = () => {
-    if (!result) return;
-    const url = window.location.href;
-    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(`اكتشفت ${result.title} عبر View Tours!\n\n${result.about.substring(0, 100)}...`)}`;
-    window.open(fbUrl, '_blank', 'width=600,height=400');
-  };
-
-  const handleManualPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    
-    const readers = files.map(file => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(readers).then(newImages => {
-      setUploadedImages(prev => [...prev, ...newImages]);
-    });
+  const readText = (text: string, id: string) => {
+    window.speechSynthesis.cancel();
+    if (readingSection === id) { setReadingSection(null); return; }
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.onstart = () => setReadingSection(id);
+    utt.onend = () => setReadingSection(null);
+    window.speechSynthesis.speak(utt);
   };
 
   return (
-    <div className={`min-h-screen bg-[#021512] text-slate-100 flex flex-col items-center selection:bg-yellow-500/30 font-['Tajawal'] font-bold pb-10 overflow-x-hidden ${selectedLang === 'ar' ? 'rtl-dir' : 'ltr-dir'}`}>
-      <header className="w-full py-4 px-6 bg-[#021512]/95 backdrop-blur-md shadow-2xl sticky top-0 z-50 flex flex-col gap-4 border-b border-yellow-600/30 no-print">
+    <div className={`min-h-screen bg-[#021512] text-slate-100 flex flex-col items-center font-['Tajawal'] pb-10 ${selectedLang === 'ar' || selectedLang === 'zh' ? 'rtl' : 'ltr'}`}>
+      <header className="w-full py-4 px-6 bg-[#021512]/95 backdrop-blur-md sticky top-0 z-50 flex flex-col gap-4 border-b border-cyan-600/30">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center w-full">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex items-center gap-3">
-                 <span className="text-[24px] font-black text-yellow-500 leading-none tracking-tight">{t.appName}</span>
-                 <div className="bg-gradient-to-br from-yellow-400 to-yellow-700 p-2.5 rounded-2xl text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] relative overflow-hidden group">
-                    <i className="fas fa-person-walking text-2xl group-hover:animate-bounce"></i>
-                 </div>
-                 <span className="text-[20px] font-black text-[#90EE90] tracking-widest uppercase leading-none opacity-80">{t.appGo}</span>
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
+              <span className="text-xl md:text-2xl font-black text-white tracking-tighter">View Tours</span>
+              <div className="flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-500 w-10 h-10 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)]">
+                <i className="fas fa-camera-retro text-black text-xl animate-pulse"></i>
               </div>
+              <span className="text-xl md:text-2xl font-black bg-gradient-to-r from-yellow-400 to-amber-500 bg-clip-text text-transparent">{t.logoText}</span>
             </div>
-            <select value={selectedLang} onChange={(e) => setSelectedLang(e.target.value)} className="bg-white/5 border border-yellow-600/30 rounded-full py-1.5 px-3 text-[11px] font-black text-yellow-500 focus:outline-none focus:border-yellow-500 cursor-pointer h-fit">
-              {languages.map(lang => <option key={lang.code} value={lang.code} className="bg-[#021512]">{lang.native}</option>)}
+            <select value={selectedLang} onChange={(e) => setSelectedLang(e.target.value)} className="bg-white/5 border border-cyan-600/30 rounded-full py-1 px-3 text-cyan-400 text-xs">
+              {languages.map(l => <option key={l.code} value={l.code} className="bg-[#021512]">{l.native}</option>)}
             </select>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <form onSubmit={handleSearch} className="relative flex-1 md:w-64">
-              <input type="text" placeholder={t.searchPlaceholder} value={searchText} onChange={(e) => setSearchText(e.target.value)} className="w-full bg-white/5 border border-yellow-600/30 rounded-full py-2 px-10 text-sm font-bold focus:outline-none focus:border-yellow-500 text-yellow-100" />
-              <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-yellow-600/50 text-xs"></i>
+          <div className="flex items-center gap-3">
+            <form onSubmit={(e) => { e.preventDefault(); if(searchText) { stopCamera(); performAnalysis(searchText); } }} className="relative">
+              <input type="text" placeholder={t.searchPlaceholder} value={searchText} onChange={(e) => setSearchText(e.target.value)} className="bg-white/5 border border-cyan-600/30 rounded-full py-2 px-10 text-cyan-100 focus:outline-none w-40 md:w-64 text-sm" />
+              <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-cyan-600/50"></i>
             </form>
-            <div className="flex flex-col items-center gap-2">
-              <button onClick={() => fileInputRef.current?.click()} className="bg-yellow-600/10 hover:bg-yellow-600/20 w-10 h-10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-600/30 shadow-lg active:scale-90 transition-transform">
-                <i className="fas fa-camera"></i>
-              </button>
-              <button 
-                onClick={startCamera}
-                className="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-500 text-[9px] font-black px-3 py-1 rounded-full border border-yellow-500/30 transition-all uppercase tracking-widest active:scale-95 shadow-[0_0_15px_rgba(234,179,8,0.1)]"
-              >
-                {t.newDiscovery}
+            <div className="flex items-center gap-2">
+              <button onClick={() => fileInputRef.current?.click()} className="bg-emerald-600/20 w-10 h-10 rounded-full flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+                <i className="fas fa-image"></i>
               </button>
             </div>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
                 const reader = new FileReader();
-                reader.onloadend = () => { 
-                  stopCamera(); 
-                  const res = reader.result as string;
-                  setCapturedImage(res);
-                  performAnalysis("Identify landmark", res); 
-                };
+                reader.onloadend = () => { stopCamera(); performAnalysis("Identify", reader.result as string); };
                 reader.readAsDataURL(file);
               }
             }} />
@@ -402,183 +319,165 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="w-full max-w-5xl px-4 flex-1 flex flex-col py-6">
-        {loading && (
-          <div className="flex-1 flex flex-col items-center justify-center py-20 no-print text-center">
-             {capturedImage && (
-              <div className="mb-10 p-4">
-                <img src={capturedImage} className="h-40 w-auto rounded-xl border-2 border-yellow-500 shadow-xl mx-auto" alt="Analyzing" />
-              </div>
+      <main className="w-full max-w-4xl px-4 flex-1 flex flex-col pt-6">
+        {(loading || expanding) && (
+          <div className="fixed inset-0 bg-[#021512]/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center text-center">
+            <div className="relative w-48 h-48 flex items-center justify-center mb-8">
+                <div className="absolute w-full h-full border-[10px] border-transparent border-t-cyan-400 rounded-full animate-[spin_1.5s_linear_infinite]"></div>
+                <div className="absolute w-[80%] h-[80%] border-[8px] border-transparent border-b-emerald-400 rounded-full animate-[spin_2s_linear_infinite_reverse]"></div>
+                <div className="text-4xl font-black text-white">{isWaitingForAI ? <i className="fas fa-magic animate-pulse"></i> : countdown}</div>
+            </div>
+            {capturedImage && (
+                <div className="mb-6 animate-in zoom-in duration-500">
+                    <img src={capturedImage} className="w-64 h-40 object-cover rounded-3xl border-4 border-cyan-500/30 shadow-2xl" alt="Analysing..." />
+                </div>
             )}
-            <div className="w-40 h-40 relative mx-auto">
-                <div className="absolute inset-0 border-t-4 border-yellow-500 rounded-full animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center text-yellow-500 text-5xl"><i className="fas fa-person-walking animate-bounce"></i></div>
-            </div>
-            <div className="mt-10 space-y-2">
-              <p className="text-3xl font-black text-yellow-500 animate-pulse uppercase tracking-widest">{t.loading}</p>
-              <p className="text-lg font-black text-yellow-600/80">{t.loadingSub}</p>
-            </div>
+            <p className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-emerald-400 bg-clip-text text-transparent">
+              {expanding ? t.loadingExpansion : (isWaitingForAI ? t.waitingGeneration : t.loading)}
+            </p>
           </div>
         )}
 
-        {isScanning && !loading && !error && (
-          <div className="flex-1 flex flex-col gap-6 w-full max-w-2xl mx-auto no-print">
-            <div className="relative rounded-[3.5rem] overflow-hidden border-4 border-yellow-600/20 shadow-2xl aspect-[3/4] bg-black">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-yellow-500 shadow-[0_0_20px_rgba(234,179,8,1)] animate-[scan_3s_infinite]"></div>
-              <div className="absolute bottom-12 left-0 w-full flex justify-center">
-                <button onClick={() => {
-                  if (!videoRef.current) return;
-                  const canvas = document.createElement('canvas');
-                  canvas.width = videoRef.current.videoWidth;
-                  canvas.height = videoRef.current.videoHeight;
-                  canvas.getContext('2d')!.drawImage(videoRef.current, 0, 0);
-                  const dataUrl = canvas.toDataURL('image/jpeg');
-                  stopCamera();
-                  setCapturedImage(dataUrl);
-                  performAnalysis("Identify landmark", dataUrl);
-                }} className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-yellow-700 rounded-full flex items-center justify-center text-black shadow-2xl active:scale-90 transition-transform"><i className="fas fa-camera text-3xl"></i></button>
-              </div>
+        {isScanning && !loading && (
+          <div className="relative rounded-[3rem] overflow-hidden border-4 border-cyan-600/20 aspect-[4/5] bg-black max-w-xl mx-auto w-full">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="w-full h-full object-cover" 
+              style={{ transform: 'scaleX(-1)' }} 
+            />
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
+              <button onClick={() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = videoRef.current!.videoWidth; canvas.height = videoRef.current!.videoHeight;
+                const ctx = canvas.getContext('2d')!;
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(videoRef.current!, 0, 0);
+                const data = canvas.toDataURL('image/jpeg');
+                stopCamera(); performAnalysis("Identify", data);
+              }} className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-emerald-500 rounded-full flex items-center justify-center text-black shadow-2xl"><i className="fas fa-camera text-2xl"></i></button>
             </div>
           </div>
         )}
 
         {result && !loading && (
-          <div className="space-y-12 pb-20 w-full">
-            <div className="text-center space-y-6 no-print">
-              <h3 className="text-[26px] font-black text-yellow-500 drop-shadow-2xl whitespace-pre-line leading-tight">{result.title}</h3>
-            </div>
-
-            <div className="relative papyrus-container rounded-[3rem] shadow-2xl p-6 md:p-20 space-y-10" dir={selectedLang === 'ar' ? 'rtl' : 'ltr'}>
-                <div className="space-y-4 no-print border-b border-brown-900/10 pb-8 flex flex-col items-center">
-                  <input 
-                    type="file" 
-                    multiple 
-                    ref={multiFileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleManualPhotoUpload}
-                  />
-                  
-                  <div className="flex gap-4 items-center justify-center flex-wrap">
-                    <button 
-                      onClick={() => multiFileInputRef.current?.click()}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-black px-6 py-3 rounded-full text-md font-black transition-all shadow-lg flex items-center gap-2 active:scale-95"
-                    >
-                      <i className="fas fa-images"></i>
-                      {t.uploadImages}
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
+            <h2 className="text-4xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400">{result.title}</h2>
+            
+            <div className="bg-[#e4d5b7] text-slate-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl border-l-[15px] border-emerald-600/40 relative">
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex justify-between items-start">
+                    <h3 className="text-3xl font-black text-[#3e2723]">{t.aboutTitle}</h3>
+                    <button onClick={() => readText(result.about, 'main')} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg ${readingSection === 'main' ? 'bg-red-700 text-white' : 'bg-[#3e2723] text-cyan-400'}`}>
+                    <i className={`fas ${readingSection === 'main' ? 'fa-stop' : 'fa-volume-up'}`}></i>
                     </button>
-                    
-                    {result.googleImagesLink && (
-                      <a 
-                        href={result.googleImagesLink}
-                        target="_blank"
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full text-md font-black transition-all shadow-lg flex items-center gap-2 active:scale-95"
-                      >
-                        <i className="fab fa-google"></i>
-                        {t.searchGoogle}
-                      </a>
+                </div>
+                
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')}
+                        className="bg-black text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30"
+                    >
+                        {/* CHANGED: Yellow text as requested */}
+                        <i className="fas fa-search-plus mr-1"></i> <span className="text-yellow-300 font-black">{t.confirmImages}</span>
+                    </button>
+                    <button 
+                        onClick={() => resultGalleryInputRef.current?.click()}
+                        disabled={loadingImages}
+                        className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                        <i className={`fas ${loadingImages ? 'fa-spinner fa-spin' : 'fa-cloud-download-alt'} mr-1`}></i> 
+                        {t.loadImages}
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={resultGalleryInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={handleMultipleImageUpload} 
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    {capturedImage && (
+                        <div className="relative group">
+                             <img src={capturedImage} className="w-full h-24 object-cover rounded-xl border-2 border-cyan-600 shadow-md" alt="Captured" />
+                             <span className="absolute bottom-1 right-1 bg-cyan-600 text-white text-[8px] px-1 rounded">ORIGINAL</span>
+                        </div>
                     )}
-                  </div>
+                    {landmarkImages.map((url, idx) => (
+                        <div key={idx} className="relative group">
+                          <img src={url} className="w-full h-24 object-cover rounded-xl border border-black/10 shadow-sm" alt={`Web ${idx}`} />
+                        </div>
+                    ))}
+                </div>
+              </div>
 
-                  {(uploadedImages.length > 0 || capturedImage) && (
-                    <div className="flex gap-2 mt-4 overflow-x-auto w-full justify-center p-2">
-                      {capturedImage && (
-                        <div className="w-24 h-24 flex-shrink-0 border-2 border-yellow-700/30 rounded-xl overflow-hidden shadow-md">
-                          <img src={capturedImage} className="w-full h-full object-cover" alt="Discovery" />
-                        </div>
-                      )}
-                      {uploadedImages.map((img, i) => (
-                        <div key={i} className="w-24 h-24 flex-shrink-0 border-2 border-yellow-700/30 rounded-xl overflow-hidden shadow-md">
-                          <img src={img} className="w-full h-full object-cover" alt={`Upload ${i}`} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <p className="text-xl leading-relaxed font-bold text-justify opacity-90">{result.about}</p>
+              
+              <div className="mt-10 flex flex-wrap justify-center gap-6 border-t-2 border-[#3e2723]/10 pt-8">
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(result.title)}`, '_blank')}
+                    className="w-16 h-16 rounded-full bg-cyan-700 text-white flex items-center justify-center shadow-lg" title={t.directions}>
+                    <i className="fas fa-directions text-2xl"></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{t.directions}</span>
                 </div>
 
-                <section className="space-y-6">
-                    <div className="flex items-center justify-between border-b-2 border-brown-900/10 pb-4">
-                        <h4 className="text-[#4e342e] font-black text-3xl">{t.aboutTitle}</h4>
-                        <button onClick={() => readText(result.about, 'about')} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg ${readingSection === 'about' ? 'bg-red-800 text-white' : 'bg-[#5d4037] text-yellow-400'}`}><i className={`fas ${readingSection === 'about' ? 'fa-stop' : 'fa-play'}`}></i></button>
-                    </div>
-                    <div className="text-[#1a1a1a] text-xl leading-relaxed text-justify whitespace-pre-wrap font-bold">{result.about}</div>
-                </section>
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={shareAsHTML} className="w-16 h-16 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg" title={t.share}>
+                    <i className="fas fa-share-nodes text-2xl"></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{t.share}</span>
+                </div>
 
-                {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
-                  <section className="space-y-8 pt-4 border-t-2 border-brown-900/10">
-                    <h4 className="text-[#4e342e] font-black text-3xl text-center">
-                      {t.nearbyTitlePrefix}{result.title}
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {result.nearbyLandmarks.slice(0, 26).map((landmark, idx) => (
-                        <button key={idx} onClick={() => performAnalysis(`Identify landmark: ${landmark.name}`)} className="bg-[#5d4037]/5 hover:bg-[#5d4037]/10 border border-brown-900/10 p-4 rounded-2xl text-start transition-all group flex flex-col gap-1 relative overflow-hidden">
-                          <div className="flex justify-between items-start">
-                            <span className="text-[#3e2723] font-black text-lg group-hover:text-yellow-800">{landmark.name}</span>
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="bg-yellow-700/10 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full">{landmark.distance}</span>
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(landmark.name)}`} target="_blank" onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 bg-[#005a66] hover:bg-[#007a8a] text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase transition-colors"><i className="fas fa-location-arrow"></i><span>{landmark.direction}</span></a>
-                            </div>
-                          </div>
-                          <p className="text-[#1a1a1a] text-xs font-bold opacity-70 line-clamp-1">{landmark.description}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={copyToClipboard} className="w-16 h-16 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-lg hover:bg-yellow-500" title={t.copy}>
+                    <i className={`fas ${copyStatus ? 'fa-check' : 'fa-copy'} text-2xl`}></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{copyStatus ? t.copied : t.copy}</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-4">
+                {!hasExpandedHistory && (
+                  <button onClick={() => performAnalysis("", undefined, true)} className="bg-[#3e2723]/10 text-[#3e2723] py-4 rounded-2xl font-black"><i className="fas fa-info-circle mr-2"></i>{t.expandHistory}</button>
                 )}
+                {hasExpandedHistory && (
+                   <button onClick={() => performAnalysis("", undefined, false, true)} className="bg-emerald-800 text-white py-4 rounded-2xl font-black shadow-md"><i className="fas fa-th-list mr-2"></i>{t.expandNearby}</button>
+                )}
+              </div>
 
-                <div className="flex flex-col items-center gap-4 pt-8 no-print border-t border-brown-900/10 w-full">
-                   <p className="text-[#4e342e] font-black text-sm uppercase">{t.shareTitle}</p>
-                   <div className="flex gap-6 items-center justify-center flex-wrap">
-                      <div className="flex flex-col items-center gap-2">
-                        <button onClick={() => shareDiscovery(false)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-[#4e342e] text-yellow-400">
-                          <i className="fas fa-copy"></i>
-                        </button>
-                        <span className="text-[#4e342e] text-[10px] font-black">نسخ نص</span>
-                      </div>
-                      
-                      <div className="flex flex-col items-center gap-2">
-                        <button onClick={() => shareDiscovery(true)} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-yellow-600 text-white">
-                          <i className="fas fa-share-nodes mr-1"></i>
-                          <i className="fab fa-facebook-f ml-1"></i>
-                        </button>
-                        <span className="text-[#4e342e] text-[10px] font-black">{t.shareCombined}</span>
-                      </div>
-
-                      <div className="flex flex-col items-center gap-2">
-                        <button onClick={shareToFacebook} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-[#1877F2] text-white">
-                          <i className="fab fa-facebook-f"></i>
-                        </button>
-                        <span className="text-[#4e342e] text-[10px] font-black">{t.facebookShare}</span>
-                      </div>
-
-                      {result?.locationLink && (
-                        <div className="flex flex-col items-center gap-2">
-                           <a href={result.locationLink} target="_blank" className="w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-xl transition-transform hover:scale-110 bg-red-700 text-white">
-                             <i className="fas fa-location-arrow"></i>
-                           </a>
-                           <span className="text-[#4e342e] text-[10px] font-black text-center max-w-[80px]">
-                             {t.directionTo}
-                           </span>
+              {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
+                <div className="mt-12 pt-10 border-t-2 border-brown-900/10">
+                  <h4 className="text-2xl font-black mb-6 text-[#3e2723] flex items-center gap-3">
+                    <i className="fas fa-map-marker-alt text-emerald-600"></i> {t.nearbyTitlePrefix} {result.title}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {result.nearbyLandmarks.map((item, i) => (
+                      <div key={i} className="bg-white/40 p-5 rounded-2xl border border-brown-900/5 transition-all hover:bg-white/60">
+                        <div className="flex justify-between items-center font-black text-lg text-[#1b1b1b]">
+                          <span>{item.name}</span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-cyan-800 text-[10px] bg-cyan-100 px-2 py-0.5 rounded-full border border-cyan-200">{item.distance}</span>
+                            <span className="text-emerald-800 text-[10px] mt-1 font-bold">{item.direction}</span>
+                          </div>
                         </div>
-                      )}
-                   </div>
+                        <p className="text-sm font-medium opacity-80 mt-2 text-[#444]">{item.description}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              )}
             </div>
+            <div className="flex justify-center"><button onClick={startCamera} className="bg-gradient-to-r from-cyan-600 to-emerald-600 text-white px-8 py-4 rounded-full font-black text-lg shadow-xl">{t.newDiscovery}</button></div>
           </div>
         )}
       </main>
-
-      <style>{`
-        @keyframes scan { 0%, 100% { top: 10%; opacity: 0; } 50% { top: 90%; opacity: 1; } }
-        .papyrus-container {
-            background-color: #e4d5b7;
-            background-image: linear-gradient(rgba(228, 213, 183, 0.98), rgba(228, 213, 183, 0.98)), url('https://www.transparenttextures.com/patterns/natural-paper.png');
-            box-shadow: inset 0 0 100px rgba(139, 69, 19, 0.15), 0 20px 50px rgba(0, 0, 0, 0.5);
-        }
-        * { font-weight: 700 !important; }
-        .font-black, h1, h2, h3, h4, span.font-black { font-weight: 900 !important; }
-      `}</style>
     </div>
   );
 };
