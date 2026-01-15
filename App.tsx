@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
 // Types
 interface AnalysisResult {
@@ -22,8 +22,8 @@ const languages = [
 
 const translations: Record<string, any> = {
   ar: {
-    appName: "View Tours",
-    logoText: "فيو تورز",
+    appName: "ياللا بينا - Let's GO",
+    logoText: "ياللا بينا",
     searchPlaceholder: "ابحث عن معلم...",
     loading: "متعة الإكتشاف",
     waitingGeneration: "جاري عرض المعلومات...",
@@ -45,8 +45,8 @@ const translations: Record<string, any> = {
     needApiKey: "يجب اختيار مفتاح API خاص بك"
   },
   en: {
-    appName: "View Tours",
-    logoText: "View Tours",
+    appName: "Let's GO",
+    logoText: "Let's GO",
     searchPlaceholder: "Search landmark...",
     loading: "Joy of Discovery",
     waitingGeneration: "Displaying info...",
@@ -155,14 +155,13 @@ const App: React.FC = () => {
     }, 1000);
 
     try {
-      // Use standard initialization
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       
       let systemInstruction = `You are a world-class travel guide. Identify this landmark and provide details in JSON format. Language: ${selectedLang}.
       The JSON must contain:
       - title: name of the landmark.
       - about: 150 words describing it.
-      - nearbyLandmarks: An array of 6 real landmarks within 1km. Each object MUST have 'name', 'distance' (e.g. "300 متر"), 'direction' (e.g. "شمال شرق"), and 'description'.`;
+      - nearbyLandmarks: An array of 6 real landmarks within 1km. Each object MUST have 'name', 'distance' (e.g. "300 متر"), 'direction' (e.g. "شمال شرق"), and 'direction' is optional, and 'description'.`;
       
       if (isExpansion) {
         systemInstruction = `Provide an extremely deep historical and architectural study of ${result?.title}. This text MUST be minimum 400 words long. Use professional tone. Format: JSON {about: string}. Language: ${selectedLang}.`;
@@ -170,7 +169,6 @@ const App: React.FC = () => {
         systemInstruction = `Find exactly 26 real landmarks and interesting spots within 1km radius of ${result?.title}. Format: JSON {nearbyLandmarks: Array<{name, distance, direction, description}>}. Language: ${selectedLang}.`;
       }
 
-      // Use generateContent directly as per guidelines
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: imageData 
@@ -182,7 +180,6 @@ const App: React.FC = () => {
         }
       });
 
-      // Access .text property directly
       const text = response.text || "{}";
       const data = JSON.parse(text);
       
@@ -258,19 +255,13 @@ const App: React.FC = () => {
         ${result.nearbyLandmarks?.map(l => `<div class="landmark"><strong>${l.name} (${l.distance} - ${l.direction})</strong><p>${l.description}</p></div>`).join('')}
       </body>
       </html>`;
-    // Fix: Explicitly create Blob to avoid type conflicts with unknown
     const blob = new Blob([htmlContent], { type: 'text/html' });
-    const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
-    
+    // Fix: Explicitly cast to any or define correct ShareData property to satisfy TypeScript error on Blob usage in File constructor
+    const file = new File([blob as any], `${result.title}.html`, { type: 'text/html' });
     const shareData: ShareData = { files: [file], title: result.title, text: result.title };
-    
     const nav = navigator as any;
     if (nav.canShare && nav.canShare(shareData)) {
-      try {
-        await nav.share(shareData);
-      } catch (e) {
-        console.error("Sharing failed", e);
-      }
+      try { await nav.share(shareData); } catch (e) { console.error(e); }
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -294,7 +285,7 @@ const App: React.FC = () => {
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center w-full">
           <div className="flex items-center gap-2 md:gap-4">
             <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
-              <span className="text-xl md:text-2xl font-black text-white tracking-tighter">View Tours</span>
+              <span className="text-xl md:text-2xl font-black text-white tracking-tighter">ياللا بينا - Let's GO</span>
               <div className="flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-500 w-10 h-10 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)]">
                 <i className="fas fa-camera-retro text-black text-xl animate-pulse"></i>
               </div>
@@ -360,8 +351,7 @@ const App: React.FC = () => {
                 const canvas = document.createElement('canvas');
                 canvas.width = videoRef.current!.videoWidth; canvas.height = videoRef.current!.videoHeight;
                 const ctx = canvas.getContext('2d')!;
-                ctx.translate(canvas.width, 0);
-                ctx.scale(-1, 1);
+                ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
                 ctx.drawImage(videoRef.current!, 0, 0);
                 const data = canvas.toDataURL('image/jpeg');
                 stopCamera(); performAnalysis("Identify", data);
@@ -384,28 +374,14 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="flex gap-2">
-                    <button 
-                        onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')}
-                        className="bg-black text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30"
-                    >
+                    <button onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')} className="bg-black text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30">
                         <i className="fas fa-search-plus mr-1"></i> <span className="text-yellow-300 font-black">{t.confirmImages}</span>
                     </button>
-                    <button 
-                        onClick={() => resultGalleryInputRef.current?.click()}
-                        disabled={loadingImages}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={() => resultGalleryInputRef.current?.click()} disabled={loadingImages} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50">
                         <i className={`fas ${loadingImages ? 'fa-spinner fa-spin' : 'fa-cloud-download-alt'} mr-1`}></i> 
                         {t.loadImages}
                     </button>
-                    <input 
-                      type="file" 
-                      ref={resultGalleryInputRef} 
-                      className="hidden" 
-                      accept="image/*" 
-                      multiple 
-                      onChange={handleMultipleImageUpload} 
-                    />
+                    <input type="file" ref={resultGalleryInputRef} className="hidden" accept="image/*" multiple onChange={handleMultipleImageUpload} />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
@@ -416,9 +392,7 @@ const App: React.FC = () => {
                         </div>
                     )}
                     {landmarkImages.map((url, idx) => (
-                        <div key={idx} className="relative group">
-                          <img src={url} className="w-full h-24 object-cover rounded-xl border border-black/10 shadow-sm" alt={`Web ${idx}`} />
-                        </div>
+                        <div key={idx} className="relative group"><img src={url} className="w-full h-24 object-cover rounded-xl border border-black/10 shadow-sm" alt={`Web ${idx}`} /></div>
                     ))}
                 </div>
               </div>
