@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, GenerateContentParameters } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 
 // Types
 interface AnalysisResult {
@@ -155,6 +155,7 @@ const App: React.FC = () => {
     }, 1000);
 
     try {
+      // Use standard initialization
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       
       let systemInstruction = `You are a world-class travel guide. Identify this landmark and provide details in JSON format. Language: ${selectedLang}.
@@ -169,15 +170,22 @@ const App: React.FC = () => {
         systemInstruction = `Find exactly 26 real landmarks and interesting spots within 1km radius of ${result?.title}. Format: JSON {nearbyLandmarks: Array<{name, distance, direction, description}>}. Language: ${selectedLang}.`;
       }
 
-      const response = await ai.models.generateContent({
+      // Use generateContent directly as per guidelines
+      const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: imageData 
           ? { parts: [{ inlineData: { mimeType: 'image/jpeg', data: imageData.split(',')[1] } }, { text: prompt }] }
           : { parts: [{ text: prompt }] },
-        config: { systemInstruction, responseMimeType: "application/json" }
+        config: { 
+          systemInstruction, 
+          responseMimeType: "application/json"
+        }
       });
 
-      const data = JSON.parse(response.text || "{}");
+      // Access .text property directly
+      const text = response.text || "{}";
+      const data = JSON.parse(text);
+      
       if (isExpansion) {
         setResult(prev => prev ? { ...prev, about: data.about } : null);
         setHasExpandedHistory(true);
@@ -250,13 +258,12 @@ const App: React.FC = () => {
         ${result.nearbyLandmarks?.map(l => `<div class="landmark"><strong>${l.name} (${l.distance} - ${l.direction})</strong><p>${l.description}</p></div>`).join('')}
       </body>
       </html>`;
+    // Fix: Explicitly create Blob to avoid type conflicts with unknown
     const blob = new Blob([htmlContent], { type: 'text/html' });
     const file = new File([blob], `${result.title}.html`, { type: 'text/html' });
     
-    // Fix: Explicitly type the shareData to handle navigator.canShare requirements correctly
     const shareData: ShareData = { files: [file], title: result.title, text: result.title };
     
-    // Fix: cast navigator as any to handle potential missing types in older environments
     const nav = navigator as any;
     if (nav.canShare && nav.canShare(shareData)) {
       try {
@@ -381,7 +388,6 @@ const App: React.FC = () => {
                         onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')}
                         className="bg-black text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30"
                     >
-                        {/* CHANGED: Yellow text as requested */}
                         <i className="fas fa-search-plus mr-1"></i> <span className="text-yellow-300 font-black">{t.confirmImages}</span>
                     </button>
                     <button 
@@ -419,30 +425,6 @@ const App: React.FC = () => {
 
               <p className="text-xl leading-relaxed font-bold text-justify opacity-90">{result.about}</p>
               
-              <div className="mt-10 flex flex-wrap justify-center gap-6 border-t-2 border-[#3e2723]/10 pt-8">
-                <div className="flex flex-col items-center gap-2">
-                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(result.title)}`, '_blank')}
-                    className="w-16 h-16 rounded-full bg-cyan-700 text-white flex items-center justify-center shadow-lg" title={t.directions}>
-                    <i className="fas fa-directions text-2xl"></i>
-                  </button>
-                  <span className="text-sm font-bold text-[#3e2723]">{t.directions}</span>
-                </div>
-
-                <div className="flex flex-col items-center gap-2">
-                  <button onClick={shareAsHTML} className="w-16 h-16 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg" title={t.share}>
-                    <i className="fas fa-share-nodes text-2xl"></i>
-                  </button>
-                  <span className="text-sm font-bold text-[#3e2723]">{t.share}</span>
-                </div>
-
-                <div className="flex flex-col items-center gap-2">
-                  <button onClick={copyToClipboard} className="w-16 h-16 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-lg hover:bg-yellow-500" title={t.copy}>
-                    <i className={`fas ${copyStatus ? 'fa-check' : 'fa-copy'} text-2xl`}></i>
-                  </button>
-                  <span className="text-sm font-bold text-[#3e2723]">{copyStatus ? t.copied : t.copy}</span>
-                </div>
-              </div>
-
               <div className="mt-8 flex flex-col gap-4">
                 {!hasExpandedHistory && (
                   <button onClick={() => performAnalysis("", undefined, true)} className="bg-[#3e2723]/10 text-[#3e2723] py-4 rounded-2xl font-black"><i className="fas fa-info-circle mr-2"></i>{t.expandHistory}</button>
@@ -459,7 +441,7 @@ const App: React.FC = () => {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {result.nearbyLandmarks.map((item, i) => (
-                      <div key={i} className="bg-white/40 p-5 rounded-2xl border border-brown-900/5 transition-all hover:bg-white/60">
+                      <div key={i} className="bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 p-5 rounded-2xl border border-emerald-500/20 transition-all hover:bg-white/60">
                         <div className="flex justify-between items-center font-black text-lg text-[#1b1b1b]">
                           <span>{item.name}</span>
                           <div className="flex flex-col items-end">
@@ -473,6 +455,30 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              <div className="mt-10 flex flex-wrap justify-center gap-6 border-t-2 border-[#3e2723]/10 pt-8">
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(result.title)}`, '_blank')}
+                    className="w-16 h-16 rounded-full bg-cyan-700 text-white flex items-center justify-center shadow-lg hover:bg-cyan-800 transition-colors" title={t.directions}>
+                    <i className="fas fa-directions text-2xl"></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{t.directions}</span>
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={shareAsHTML} className="w-16 h-16 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg hover:bg-emerald-800 transition-colors" title={t.share}>
+                    <i className="fas fa-share-nodes text-2xl"></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{t.share}</span>
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <button onClick={copyToClipboard} className="w-16 h-16 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-lg hover:bg-yellow-500 transition-colors" title={t.copy}>
+                    <i className={`fas ${copyStatus ? 'fa-check' : 'fa-copy'} text-2xl`}></i>
+                  </button>
+                  <span className="text-sm font-bold text-[#3e2723]">{copyStatus ? t.copied : t.copy}</span>
+                </div>
+              </div>
             </div>
             <div className="flex justify-center"><button onClick={startCamera} className="bg-gradient-to-r from-cyan-600 to-emerald-600 text-white px-8 py-4 rounded-full font-black text-lg shadow-xl">{t.newDiscovery}</button></div>
           </div>
