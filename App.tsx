@@ -23,7 +23,7 @@ const languages = [
 const translations: Record<string, any> = {
   ar: {
     appName: "ياللا بينا - Let's GO",
-    logoText: "ياللا بينا",
+    logoText: "ياللا بينا - Let's GO",
     searchPlaceholder: "ابحث عن معلم...",
     loading: "متعة الإكتشاف",
     waitingGeneration: "جاري عرض المعلومات...",
@@ -155,13 +155,13 @@ const App: React.FC = () => {
     }, 1000);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       let systemInstruction = `You are a world-class travel guide. Identify this landmark and provide details in JSON format. Language: ${selectedLang}.
       The JSON must contain:
       - title: name of the landmark.
       - about: 150 words describing it.
-      - nearbyLandmarks: An array of 6 real landmarks within 1km. Each object MUST have 'name', 'distance' (e.g. "300 متر"), 'direction' (e.g. "شمال شرق"), and 'direction' is optional, and 'description'.`;
+      - nearbyLandmarks: An array of 6 real landmarks within 1km. Each object MUST have 'name', 'distance' (e.g. "300 متر"), 'direction' (e.g. "شمال شرق"), and 'description'.`;
       
       if (isExpansion) {
         systemInstruction = `Provide an extremely deep historical and architectural study of ${result?.title}. This text MUST be minimum 400 words long. Use professional tone. Format: JSON {about: string}. Language: ${selectedLang}.`;
@@ -235,29 +235,50 @@ const App: React.FC = () => {
   const shareAsHTML = async () => {
     if (!result) return;
     const allImgs = capturedImage ? [capturedImage, ...landmarkImages] : landmarkImages;
+    const isRtl = selectedLang === 'ar' || selectedLang === 'zh';
     const htmlContent = `
       <!DOCTYPE html>
-      <html lang="${selectedLang}" dir="${selectedLang === 'ar' ? 'rtl' : 'ltr'}">
+      <html lang="${selectedLang}" dir="${isRtl ? 'rtl' : 'ltr'}">
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
-          body { font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333; background: #fdfdfd; }
-          .gallery { display: grid; grid-template-cols: 1fr 1fr; gap: 10px; margin: 20px 0; }
-          .gallery img { width: 100%; height: 200px; object-fit: cover; border-radius: 12px; }
-          .landmark { margin-bottom: 15px; padding: 15px; background: #f0f9ff; border-radius: 10px; }
+          @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700;900&display=swap');
+          body { font-family: 'Tajawal', sans-serif; padding: 15px; line-height: 1.6; color: #1a202c; background: #f7fafc; margin: 0; font-weight: 900; }
+          h1 { color: #2d3748; text-align: center; font-size: 24px; margin-bottom: 20px; font-weight: 900; }
+          .gallery { display: grid; grid-template-cols: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px; }
+          .gallery img { width: 100%; height: 150px; object-fit: cover; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          .about-text { background: #fff; padding: 20px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 30px; font-size: 16px; text-align: justify; font-weight: 700; }
+          h2 { font-size: 20px; color: #2c5282; border-bottom: 3px solid #ebf8ff; padding-bottom: 10px; margin-top: 40px; font-weight: 900; }
+          .landmark { margin-bottom: 15px; padding: 15px; background: linear-gradient(135deg, #e6fffa 0%, #ebf8ff 100%); border-radius: 18px; border: 1px solid #b2f5ea; }
+          .landmark-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 900; }
+          .distance-tag { background: #319795; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+          .description { font-size: 14px; color: #4a5568; font-weight: 700; }
+          footer { text-align: center; margin-top: 50px; padding: 20px; font-size: 12px; color: #a0aec0; }
         </style>
       </head>
       <body>
         <h1>${result.title}</h1>
         <div class="gallery">${allImgs.map(url => `<img src="${url}" />`).join('')}</div>
-        <p>${result.about}</p>
-        <h2>${t.nearbyTitlePrefix} ${result.title}</h2>
-        ${result.nearbyLandmarks?.map(l => `<div class="landmark"><strong>${l.name} (${l.distance} - ${l.direction})</strong><p>${l.description}</p></div>`).join('')}
+        <div class="about-text">${result.about}</div>
+        ${result.nearbyLandmarks && result.nearbyLandmarks.length > 0 ? `
+          <h2>${t.nearbyTitlePrefix} ${result.title}</h2>
+          ${result.nearbyLandmarks.map(l => `
+            <div class="landmark">
+              <div class="landmark-header">
+                <span>${l.name}</span>
+                <span class="distance-tag">${l.distance} ${l.direction ? `(${l.direction})` : ''}</span>
+              </div>
+              <div class="description">${l.description}</div>
+            </div>
+          `).join('')}
+        ` : ''}
+        <footer>تمت المشاركة بواسطة ياللا بينا - Let's GO</footer>
       </body>
       </html>`;
     const blob = new Blob([htmlContent], { type: 'text/html' });
-    // Fix: Explicitly cast to any or define correct ShareData property to satisfy TypeScript error on Blob usage in File constructor
-    const file = new File([blob as any], `${result.title}.html`, { type: 'text/html' });
+    // Fix: Explicitly cast blob array to any to satisfy the File constructor's requirement for a Blob array.
+    const file = new File([blob as Blob], `${result.title}.html`, { type: 'text/html' });
     const shareData: ShareData = { files: [file], title: result.title, text: result.title };
     const nav = navigator as any;
     if (nav.canShare && nav.canShare(shareData)) {
@@ -284,12 +305,27 @@ const App: React.FC = () => {
       <header className="w-full py-4 px-6 bg-[#021512]/95 backdrop-blur-md sticky top-0 z-50 flex flex-col gap-4 border-b border-cyan-600/30">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center w-full">
           <div className="flex items-center gap-2 md:gap-4">
-            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
-              <span className="text-xl md:text-2xl font-black text-white tracking-tighter">ياللا بينا - Let's GO</span>
-              <div className="flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-500 w-10 h-10 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-                <i className="fas fa-camera-retro text-black text-xl animate-pulse"></i>
+            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 relative overflow-hidden group min-w-[200px]">
+              {/* Animated Walking Man crossing from right to left */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute top-1/2 -translate-y-1/2 right-[-30px] animate-[walkAcross_6s_linear_infinite] opacity-40 text-cyan-400">
+                   <i className="fas fa-walking text-2xl"></i>
+                </div>
               </div>
-              <span className="text-xl md:text-2xl font-black bg-gradient-to-r from-yellow-400 to-amber-500 bg-clip-text text-transparent">{t.logoText}</span>
+              <div className="flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-500 w-10 h-10 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.4)] z-10">
+                <i className="fas fa-walking text-black text-xl"></i>
+              </div>
+              <span className="text-xl md:text-2xl font-black bg-gradient-to-r from-yellow-400 to-cyan-400 bg-clip-text text-transparent z-10">
+                {t.logoText}
+              </span>
+              <style>{`
+                @keyframes walkAcross {
+                  0% { transform: translateY(-50%) translateX(0); opacity: 0; }
+                  10% { opacity: 0.7; }
+                  90% { opacity: 0.7; }
+                  100% { transform: translateY(-50%) translateX(-250px); opacity: 0; }
+                }
+              `}</style>
             </div>
             <select value={selectedLang} onChange={(e) => setSelectedLang(e.target.value)} className="bg-white/5 border border-cyan-600/30 rounded-full py-1 px-3 text-cyan-400 text-xs">
               {languages.map(l => <option key={l.code} value={l.code} className="bg-[#021512]">{l.native}</option>)}
@@ -363,7 +399,6 @@ const App: React.FC = () => {
         {result && !loading && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
             <h2 className="text-4xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400">{result.title}</h2>
-            
             <div className="bg-[#e4d5b7] text-slate-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl border-l-[15px] border-emerald-600/40 relative">
               <div className="flex flex-col gap-4 mb-6">
                 <div className="flex justify-between items-start">
@@ -372,9 +407,8 @@ const App: React.FC = () => {
                     <i className={`fas ${readingSection === 'main' ? 'fa-stop' : 'fa-volume-up'}`}></i>
                     </button>
                 </div>
-                
                 <div className="flex gap-2">
-                    <button onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')} className="bg-black text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30">
+                    <button onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(result.title)}&tbm=isch`, '_blank')} className="bg-zinc-800 text-yellow-400 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-zinc-900 transition-colors border border-yellow-400/30">
                         <i className="fas fa-search-plus mr-1"></i> <span className="text-yellow-300 font-black">{t.confirmImages}</span>
                     </button>
                     <button onClick={() => resultGalleryInputRef.current?.click()} disabled={loadingImages} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50">
@@ -383,7 +417,6 @@ const App: React.FC = () => {
                     </button>
                     <input type="file" ref={resultGalleryInputRef} className="hidden" accept="image/*" multiple onChange={handleMultipleImageUpload} />
                 </div>
-
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
                     {capturedImage && (
                         <div className="relative group">
@@ -396,9 +429,7 @@ const App: React.FC = () => {
                     ))}
                 </div>
               </div>
-
               <p className="text-xl leading-relaxed font-bold text-justify opacity-90">{result.about}</p>
-              
               <div className="mt-8 flex flex-col gap-4">
                 {!hasExpandedHistory && (
                   <button onClick={() => performAnalysis("", undefined, true)} className="bg-[#3e2723]/10 text-[#3e2723] py-4 rounded-2xl font-black"><i className="fas fa-info-circle mr-2"></i>{t.expandHistory}</button>
@@ -407,9 +438,8 @@ const App: React.FC = () => {
                    <button onClick={() => performAnalysis("", undefined, false, true)} className="bg-emerald-800 text-white py-4 rounded-2xl font-black shadow-md"><i className="fas fa-th-list mr-2"></i>{t.expandNearby}</button>
                 )}
               </div>
-
               {result.nearbyLandmarks && result.nearbyLandmarks.length > 0 && (
-                <div className="mt-12 pt-10 border-t-2 border-brown-900/10">
+                <div className="mt-12 pt-10 border-t-2 border-[#3e2723]/10">
                   <h4 className="text-2xl font-black mb-6 text-[#3e2723] flex items-center gap-3">
                     <i className="fas fa-map-marker-alt text-emerald-600"></i> {t.nearbyTitlePrefix} {result.title}
                   </h4>
@@ -429,7 +459,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-
               <div className="mt-10 flex flex-wrap justify-center gap-6 border-t-2 border-[#3e2723]/10 pt-8">
                 <div className="flex flex-col items-center gap-2">
                   <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(result.title)}`, '_blank')}
@@ -438,14 +467,12 @@ const App: React.FC = () => {
                   </button>
                   <span className="text-sm font-bold text-[#3e2723]">{t.directions}</span>
                 </div>
-
                 <div className="flex flex-col items-center gap-2">
                   <button onClick={shareAsHTML} className="w-16 h-16 rounded-full bg-emerald-700 text-white flex items-center justify-center shadow-lg hover:bg-emerald-800 transition-colors" title={t.share}>
                     <i className="fas fa-share-nodes text-2xl"></i>
                   </button>
                   <span className="text-sm font-bold text-[#3e2723]">{t.share}</span>
                 </div>
-
                 <div className="flex flex-col items-center gap-2">
                   <button onClick={copyToClipboard} className="w-16 h-16 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-lg hover:bg-yellow-500 transition-colors" title={t.copy}>
                     <i className={`fas ${copyStatus ? 'fa-check' : 'fa-copy'} text-2xl`}></i>
